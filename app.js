@@ -59,7 +59,27 @@ function similarity(a,b){a=normalize(a);b=normalize(b);if(!a||!b)return 0;if(a==
 function aliases(e){return uniq([e.name,...String(e.aliases||'').split(',')].map(clean))}
 function contentTokens(s){const stop=new Set(['what','is','are','your','you','the','a','an','this','that','do','does','can','i','me','my','for','of','to','in','on','and','or','it','its','there','please','tell','give','get','how','where','when','which','would','could','should','will','our','we','ur']);return words(s).filter(x=>x.length>2&&!stop.has(x))}
 function phraseSignal(text,phrase){const A=contentTokens(text),B=contentTokens(phrase);if(A.length<3)return 0;if(!B.length)return similarity(text,phrase);let common=0;for(const x of A){for(const y of B){if(x===y||lev(x,y)<=Math.ceil(Math.max(x.length,y.length)*.25)){common++;break}}}return common/Math.max(B.length,1)}
-function factCandidates(text){const nt=normalize(text),out=[];for(let i=0;i<K.facts.length;i++){const f=K.facts[i],als=uniq([f.key,...String(f.aliases||'').split(',')].map(clean));let hit='',score=0;for(const a of als){if(!a)continue;if(present(nt,a)){hit=a;score=Math.max(score,20+a.split(' ').length*1.7)}else{const sim=similarity(nt,a);if(sim>.76){hit='near: '+a;score=Math.max(score,4+sim*4)}}}if(score)out.push({key:'CUSTOM_FACT',label:String(f.key||'FACT').toUpperCase(),score,evidence:[hit||f.key],needsEntity:false,customFact:f})}return out.sort((a,b)=>b.score-a.score)}
+function factCandidates(text){
+const nt=normalize(text),out=[];
+for(let i=0;i<K.facts.length;i++){
+ const f=K.facts[i],aliasesList=uniq([f.key,...String(f.aliases||'').split(',')].map(clean));
+ let bestScore=0,best='',matchedKey='';
+ for(const a of aliasesList){
+  if(!a)continue;
+  if(present(nt,a)){const sc=40+Math.min(18,a.split(' ').length*4);if(sc>bestScore){bestScore=sc;best=a;matchedKey=a}}
+  else if(a.length>=4){
+   const sim=similarity(nt,a);
+   const queryHasKey=contentTokens(nt).some(t=>contentTokens(a).includes(t));
+   if(sim>=.82){const sc=11+(sim*10)+(queryHasKey?8:0);if(sc>bestScore){bestScore=sc;best='near: '+a;matchedKey=a}}
+  }
+ }
+ if(bestScore){
+  const questionBoost=/^(?:what|whats|where|which|who|when|how|can|do|does|is|are|tell|give|send|show|could|would)/.test(nt)?8:0;
+  out.push({key:'CUSTOM_FACT',label:String(f.key||'FACT').toUpperCase(),score:bestScore+questionBoost,evidence:[best||matchedKey],needsEntity:false,customFact:f});
+ }
+}
+return out.sort((a,b)=>b.score-a.score);
+}
 function entities(){return[...K.products.map((x,i)=>({type:'PRODUCT',index:i,name:x.name,aliases:aliases(x),data:x})),...K.services.map((x,i)=>({type:'SERVICE',index:i,name:x.name,aliases:aliases(x),data:x}))]}
 function resolveEntity(text){const nt=normalize(text),all=entities(),scores=[];for(const e of all){let best=0,matched='';for(const a of e.aliases){if(!a)continue;if(present(nt,a)){const sc=.97;if(sc>best){best=sc;matched=a}}else{const sim=similarity(nt,a);if(sim>.66){const sc=.45+sim*.45;if(sc>best){best=sc;matched=a}}}}const nameTokens=[...new Set(normalize(e.name).split(' ').filter(x=>x.length>=4))];for(const tok of nameTokens){if(present(nt,tok)&&best<.68){best=.68;matched=tok}}if(best)scores.push({...e,score:best,matched,method:best>.9?'exact alias':best>.67?'name/context':'fuzzy'})}scores.sort((a,b)=>b.score-a.score);if(!scores.length){if(all.length===1&&/(product|item|thing|service|this|that|package)/.test(nt))return{...all[0],score:.72,matched:all[0].name,method:'single-entry context'};return null}const top=scores[0],ties=scores.filter(x=>x.score>=top.score-.06);let ambiguous=ties.length>1;if(top.score>.9&&String(top.matched||'').trim().length<=5&&scores.slice(1).some(x=>x.score>=.65))ambiguous=true;return{...top,candidates:ambiguous?scores.filter(x=>x.score>=Math.max(.65,top.score-.34)).slice(0,5):ties,ambiguous,method:top.method}}
 function profileCandidates(text){
@@ -108,56 +128,67 @@ for(const p of map){
 return out;
 }
 function intentCandidates(text){
-  const nt=normalize(text),out=[...profileCandidates(text)];
-  for(const [key,d] of Object.entries(INTENTS)){
-    let exact=0,evidence=[],bestFuzzy=0,bestPhrase='';
-    for(const p of d.patterns){
-      const n=normalize(p);
-      if(present(nt,n)){exact++;evidence.push(p)}
-      else{const ps=phraseSignal(nt,n);if(ps>=.66&&ps>bestFuzzy){bestFuzzy=ps;bestPhrase='near: '+p}}
-    }
-    const score=exact?12+Math.min(10,(exact-1)*2):bestFuzzy>=.5?3+bestFuzzy*5:0;
-    if(score){
-      if(!exact&&bestPhrase)evidence.push(bestPhrase);
-      out.push({key,label:d.label,score,needsEntity:key==='PRICE'||key==='PRODUCT_PURPOSE'||key==='AVAILABILITY'||key==='DELIVERY'||key==='PURCHASE'||key==='DISCOUNT'||key==='QUOTE'||key==='REFUND'||key==='ORDER_STATUS'||key==='COMPATIBILITY'||key==='FEATURES'||key==='INCLUDED'||key==='AUDIENCE'||key==='LEAD_TIME'||key==='CUSTOMIZATION'||key==='DEMO_TRIAL'||key==='CANCELLATION'||key==='TAX'||key==='WHOLESALE'||key==='LICENSE'||key==='ACCOUNT_ACCESS',evidence:uniq(evidence)});
-    }
+ const nt=normalize(text), out=[...profileCandidates(text)], entity=resolveEntity(text);
+ const rules={
+  PURPOSE:{key:'PRODUCT_PURPOSE',label:'PRODUCT PURPOSE',score:42,needsEntity:true,rx:[/\bwhat(?: is|'s)?\b.*\b(?:for|used for|meant for|purpose)\b/,/\bwhat does\b.*\b(?:do|help)\b/,/\bwhy (?:would|should) i (?:buy|get|use)\b/]},
+  FEATURES:{key:'FEATURES',label:'FEATURES',score:48,needsEntity:true,rx:[/\bwhat can\b.*\bdo\b/,/\bwhat (?:features|functions|capabilities)\b/,/\bwhat does\b.*\bhave\b/]},
+  INCLUDED:{key:'INCLUDED',label:'WHAT IS INCLUDED',score:50,needsEntity:true,rx:[/\b(?:what is|whats|what's)\b.*\b(?:included|inside|in)\b/,/\bwhat (?:do|does)\b.*\b(?:get|come|comes)\b/,/\bwhat comes with\b/]},
+  PRICE:{key:'PRICE',label:'PRICE',score:44,needsEntity:true,rx:[/\b(?:how much|price|cost|rate|fee|charge)\b/,/\bwhat would i (?:pay|spend)\b/]},
+  AVAILABILITY:{key:'AVAILABILITY',label:'AVAILABILITY',score:43,needsEntity:true,rx:[/\b(?:available|availability|in stock|still have|got one|have one)\b/]},
+  DELIVERY:{key:'DELIVERY',label:'DELIVERY',score:43,needsEntity:true,rx:[/\bwhen\b.*\b(?:get|receive|arrive|deliver|ship|send)\b/,/\bhow long\b.*\b(?:delivery|shipping|take|get|receive)\b/,/\b(?:delivery|shipping)\b.*\b(?:time|when|how long)\b/]},
+  PURCHASE:{key:'PURCHASE',label:'PURCHASE',score:43,needsEntity:true,rx:[/\b(?:how do i|where can i|can i|i want to|ready to)\b.*\b(?:buy|purchase|order|get one)\b/,/\bplace an order\b/]},
+  LINK:{key:'LINK',label:'LINK',score:42,needsEntity:true,rx:[/\b(?:send|give|share|drop)\b.*\b(?:link|url)\b/,/\b(?:where is|what is)\b.*\b(?:link|url)\b/]},
+  DISCOUNT:{key:'DISCOUNT',label:'DISCOUNT',score:43,needsEntity:true,rx:[/\b(?:discount|offer|deal|coupon|promo|better price|lower price|cheaper)\b/]},
+  QUOTE:{key:'QUOTE',label:'QUOTE',score:42,needsEntity:true,rx:[/\b(?:quote|quotation|estimate)\b/]},
+  REFUND:{key:'REFUND',label:'REFUND / RETURN',score:43,needsEntity:true,rx:[/\b(?:refund|return|exchange|money back)\b/]},
+  LICENSE:{key:'LICENSE',label:'LICENSE / USAGE',score:46,needsEntity:true,rx:[/\b(?:license|licence|commercial use|commercially|business use|resell|resale|redistribut)\b/]},
+  CUSTOMIZATION:{key:'CUSTOMIZATION',label:'CUSTOMIZATION',score:43,needsEntity:true,rx:[/\b(?:customize|customise|custom|personalize|personalise|edit|change|changes)\b/]},
+  COMPATIBILITY:{key:'COMPATIBILITY',label:'COMPATIBILITY',score:43,needsEntity:true,rx:[/\b(?:compatible|compatibility|works? on|runs? on|supported|system requirements)\b/]},
+  AUDIENCE:{key:'AUDIENCE',label:'WHO IT IS FOR',score:43,needsEntity:true,rx:[/\b(?:who is|who can|who should|made for|designed for|suitable for|appropriate for)\b/]},
+  SOCIAL:{key:'SOCIAL',label:'SOCIAL / COMMUNITY',score:39,needsEntity:false,rx:[/\b(?:socials|social media|instagram|linkedin|facebook|youtube|twitter|discord)\b/]},
+  CONTACT:{key:'CONTACT',label:'CONTACT',score:38,needsEntity:false,rx:[/\b(?:contact|reach|reach out|get in touch|speak to|talk to)\b/]},
+  HOURS:{key:'HOURS',label:'HOURS',score:40,needsEntity:false,rx:[/\b(?:hours|opening|closing|timing|open today|when are you open|working hours)\b/]},
+  PAYMENT:{key:'PAYMENT',label:'PAYMENT',score:40,needsEntity:false,rx:[/\b(?:payment|pay|upi|card|bank transfer|payment method)\b/]},
+  LOCATION:{key:'LOCATION',label:'LOCATION',score:40,needsEntity:false,rx:[/\b(?:location|address|where are you based|where is your office|which city)\b/]},
+  SUPPORT:{key:'SUPPORT',label:'SUPPORT',score:39,needsEntity:false,rx:[/\b(?:support|help|customer service|customer care|assistance)\b/]}
+ };
+ const suppress=new Set();
+ if(/\bwhatsapp\b|\bwa (?:number|no|contact)\b/.test(nt))suppress.add('PHONE').add('SOCIAL');
+ if(entity){
+  for(const rule of Object.values(rules)){
+   if(rule.needsEntity && rule.rx.some(rx=>rx.test(nt))){
+    out.push({key:rule.key,label:rule.label,score:rule.score,needsEntity:true,evidence:['entity + structural question']});
+   }
   }
-  if(/^what (?:is|your|ur) .+\s+for$/.test(nt)||/^what .+\s+(?:for|about)$/.test(nt)){
-    out.push({key:'PRODUCT_PURPOSE',label:'PRODUCT PURPOSE',score:18,needsEntity:true,evidence:['structural purpose question']});
+ }
+ for(const [key,d] of Object.entries(INTENTS)){
+  if(suppress.has(key))continue;
+  let exact=0,evidence=[],fuzzy=0,best='';
+  for(const p of d.patterns){
+   const np=normalize(p);
+   if(present(nt,np)){exact++;evidence.push(p)}
+   else if(np.length>=4){
+    const ps=phraseSignal(nt,np);
+    if(ps>=.74&&ps>fuzzy){fuzzy=ps;best='near: '+p}
+   }
   }
-  if(/^(?:what|whats|what is) (?:your|ur) (?:business|company) name/.test(nt)){
-    out.push({key:'BUSINESS_NAME',label:'BUSINESS NAME',score:18,needsEntity:false,evidence:['business-name structure']});
+  let score=exact?14+Math.min(12,(exact-1)*2):fuzzy?4+fuzzy*7:0;
+  if(score){
+   if(!exact&&best)evidence.push(best);
+   if(entity&&d&&['PRICE','PRODUCT_PURPOSE','AVAILABILITY','DELIVERY','PURCHASE','DISCOUNT','QUOTE','REFUND','COMPATIBILITY','FEATURES','INCLUDED','AUDIENCE','CUSTOMIZATION','LICENSE'].includes(key))score+=6;
+   out.push({key,label:d.label,score,needsEntity:['PRICE','PRODUCT_PURPOSE','AVAILABILITY','DELIVERY','PURCHASE','DISCOUNT','QUOTE','REFUND','COMPATIBILITY','FEATURES','INCLUDED','AUDIENCE','CUSTOMIZATION','LICENSE'].includes(key),evidence:uniq(evidence)});
   }
-  if(/\b(instagram|linkedin|facebook|youtube|twitter|x account|social|socials|discord)\b/.test(nt)&&!/(\bwhatsapp\b|\bwa (?:number|no|contact)\b)/.test(nt)){out.push({key:'SOCIAL',label:'SOCIAL / COMMUNITY',score:15,needsEntity:false,evidence:['social platform signal']})}
-  if(/\bwhatsapp\b|\bwa (?:number|no|contact)\b/.test(nt))out.push({key:'WHATSAPP',label:'WHATSAPP',score:34,needsEntity:false,evidence:['direct WhatsApp signal']})
-  const quickEntity=resolveEntity(text);
-  if(quickEntity){
-    if(/\b(?:what(?: is|'s)?|whats)\b.*\b(?:for|used for|meant for|purpose)\b/.test(nt) || /\bwhat does\b.*\b(?:do|help)\b/.test(nt))out.push({key:'PRODUCT_PURPOSE',label:'PRODUCT PURPOSE',score:28,needsEntity:true,evidence:['entity + purpose structure']});
-    if(/\b(?:included|inside|contains|contain|comes with|what do i get|what do you get|what do u get|what is in|what's in|whats in)\b/.test(nt))out.push({key:'INCLUDED',label:'WHAT IS INCLUDED',score:30,needsEntity:true,evidence:['entity + inclusion structure']});
-    if(/\b(?:available|availability|in stock|stock|still have|do you have one|got one|have one)\b/.test(nt))out.push({key:'AVAILABILITY',label:'AVAILABILITY',score:29,needsEntity:true,evidence:['entity + availability structure']});
-    if(/\b(?:how much|price|cost|rate|fee|charge|expensive|cheap|cheaper)\b/.test(nt))out.push({key:'PRICE',label:'PRICE',score:29,needsEntity:true,evidence:['entity + price structure']});
-    if(/\b(?:when|how long|delivery|deliver|shipping|ship|arrive|receive|get it|send it|today|tomorrow|instant)\b/.test(nt)&&/\b(?:get|receive|arrive|deliver|delivery|shipping|ship|send)\b/.test(nt))out.push({key:'DELIVERY',label:'DELIVERY',score:27,needsEntity:true,evidence:['entity + delivery structure']});
-    if(/\b(?:features|feature|capabilities|capability|what can|what does .* have|functions|tools|what functions|what can i do)\b/.test(nt))out.push({key:'FEATURES',label:'FEATURES',score:36,needsEntity:true,evidence:['entity + feature structure']});
-    if(/\b(?:who is|who can|who should|suitable|appropriate|made for|designed for)\b/.test(nt))out.push({key:'AUDIENCE',label:'WHO IT IS FOR',score:27,needsEntity:true,evidence:['entity + audience structure']});
-    if(/\b(?:custom|customize|customise|personalize|personalise|edit|changes)\b/.test(nt))out.push({key:'CUSTOMIZATION',label:'CUSTOMIZATION',score:27,needsEntity:true,evidence:['entity + customization structure']});
-    if(/\b(?:compatible|compatibility|work on|works on|run on|supported)\b/.test(nt))out.push({key:'COMPATIBILITY',label:'COMPATIBILITY',score:27,needsEntity:true,evidence:['entity + compatibility structure']});
-    if(/\b(?:license|licence|commercial|commercially|commercial use|business use|resell|resale|usage rights|use rights|redistribute|redistribution)\b/.test(nt))out.push({key:'LICENSE',label:'LICENSE / USAGE',score:32,needsEntity:true,evidence:['entity + licensing structure']});
-    if(/\b(?:refund|return|exchange|money back)\b/.test(nt))out.push({key:'REFUND',label:'REFUND / RETURN',score:27,needsEntity:true,evidence:['entity + refund structure']});
-    if(/\b(?:discount|offer|deal|better price|lower price|bulk)\b/.test(nt))out.push({key:'DISCOUNT',label:'DISCOUNT',score:27,needsEntity:true,evidence:['entity + discount structure']});
-    if(/\b(?:purchase|buy|order|get one|take one|place an order)\b/.test(nt))out.push({key:'PURCHASE',label:'PURCHASE',score:27,needsEntity:true,evidence:['entity + purchase structure']});
-  }
-  for(const r of K.learned){
-    const ps=phraseSignal(nt,r.phrase);
-    if(ps>=.7)out.push({key:r.intent,label:(r.intent||'CUSTOM').replaceAll('_',' '),score:20+ps*8,needsEntity:false,evidence:['learned: '+r.phrase],learned:true,entityName:r.entity||''});
-  }
-  out.push(...factCandidates(text));
-  const merged=new Map();
-  for(const item of out){
-    const prev=merged.get(item.key);
-    if(!prev)merged.set(item.key,item);
-    else{prev.score=Math.max(prev.score,item.score);prev.evidence=uniq([...(prev.evidence||[]),...(item.evidence||[])]);if(item.customFact)prev.customFact=item.customFact;if(item.entityName)prev.entityName=item.entityName;}
-  }
-  return [...merged.values()].sort((a,b)=>b.score-a.score);
+ }
+ if(/^what .+\s+for$/.test(nt)&&entity)out.push({key:'PRODUCT_PURPOSE',label:'PRODUCT PURPOSE',score:44,needsEntity:true,evidence:['purpose question grammar']});
+ if(/^what (?:is|are) .+\s+inside$/.test(nt)&&entity)out.push({key:'INCLUDED',label:'WHAT IS INCLUDED',score:48,needsEntity:true,evidence:['inside question grammar']});
+ if(/^(?:what|whats|what is) (?:your|ur) (?:business|company) name/.test(nt))out.push({key:'BUSINESS_NAME',label:'BUSINESS NAME',score:46,needsEntity:false,evidence:['business-name grammar']});
+ const merged=new Map();
+ for(const item of out){
+  const prev=merged.get(item.key);
+  if(!prev)merged.set(item.key,item);
+  else{prev.score=Math.max(prev.score,item.score);prev.evidence=uniq([...(prev.evidence||[]),...(item.evidence||[])]);if(item.customFact)prev.customFact=item.customFact;if(item.entityName)prev.entityName=item.entityName}
+ }
+ return [...merged.values()].sort((a,b)=>b.score-a.score);
 }
 function profileEntries(){const b=K.business;return[
 {intent:'BUSINESS_NAME',key:'business name',value:b.name,aliases:['business name','company name','brand name']},{intent:'BUSINESS_DESCRIPTION',key:'business description',value:b.description,aliases:['business description','about business','what you do']},{intent:'WEBSITE',key:'website',value:b.website,aliases:['website','site','homepage','website link']},{intent:'EMAIL',key:'email',value:b.email,aliases:['email','email address','mail']},{intent:'PHONE',key:'phone',value:b.phone,aliases:['phone','phone number','mobile number']},{intent:'PHONE',key:'whatsapp',value:b.whatsapp,aliases:['whatsapp','whatsapp number']},{intent:'LOCATION',key:'location',value:[b.address,b.city,b.country].filter(Boolean).join(', '),aliases:['location','address','office address']},{intent:'HOURS',key:'hours',value:b.hours,aliases:['hours','opening hours','business hours','working hours']},{intent:'PAYMENT',key:'payments',value:b.payments,aliases:['payment methods','payment options','ways to pay']},{intent:'DELIVERY',key:'delivery',value:b.delivery,aliases:['delivery','shipping','delivery details']},{intent:'REFUND',key:'refund',value:b.refund,aliases:['refund policy','refund']},{intent:'REFUND',key:'returns',value:b.returns,aliases:['return policy','exchange policy','returns']},{intent:'SUPPORT',key:'support',value:b.email||b.phone||b.whatsapp,aliases:['support','support contact']}].filter(x=>String(x.value||'').trim())}
