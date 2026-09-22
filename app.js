@@ -182,6 +182,7 @@ function intentCandidates(text){
  if(/^what .+\s+for$/.test(nt)&&entity)out.push({key:'PRODUCT_PURPOSE',label:'PRODUCT PURPOSE',score:44,needsEntity:true,evidence:['purpose question grammar']});
  if(/^what (?:is|are) .+\s+inside$/.test(nt)&&entity)out.push({key:'INCLUDED',label:'WHAT IS INCLUDED',score:48,needsEntity:true,evidence:['inside question grammar']});
  if(/^(?:what|whats|what is) (?:your|ur) (?:business|company) name/.test(nt))out.push({key:'BUSINESS_NAME',label:'BUSINESS NAME',score:46,needsEntity:false,evidence:['business-name grammar']});
+ out.push(...factCandidates(text));
  const merged=new Map();
  for(const item of out){
   const prev=merged.get(item.key);
