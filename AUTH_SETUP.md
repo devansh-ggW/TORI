@@ -21,4 +21,4 @@ Replace the placeholders in the legal pages with the real legal business name, a
 
 
 ## Required Supabase Auth setting
-For real email ownership verification, keep **Confirm email** enabled in the `tori` project under Authentication → Providers → Email. Hosted Supabase projects enable email confirmation by default, but the setting should be verified before launch. The deployed site URL should be `https://tori.dewify.shop` and the confirmation redirect should be `https://tori.dewify.shop/auth.html?mode=signin`.
+For real email ownership verification, keep **Confirm email** enabled in the `tori` project under Authentication → Providers → Email. Hosted Supabase projects enable email confirmation by default, but the setting should be verified before launch. The deployed site URL should be `https://tori.dewify.shop` and the confirmation redirect should be `https://tori.dewify.shop/auth.html?mode=signin&verified=1`.
