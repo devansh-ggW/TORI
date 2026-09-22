@@ -132,16 +132,16 @@ function intentCandidates(text){
   if(/\bwhatsapp\b|\bwa (?:number|no|contact)\b/.test(nt))out.push({key:'WHATSAPP',label:'WHATSAPP',score:34,needsEntity:false,evidence:['direct WhatsApp signal']})
   const quickEntity=resolveEntity(text);
   if(quickEntity){
-    if(/\b(?:what(?: is|'s)?|whats)\b.*\b(?:for|used for|meant for|purpose|do)\b/.test(nt) || /\bwhat does\b.*\b(?:do|help)\b/.test(nt))out.push({key:'PRODUCT_PURPOSE',label:'PRODUCT PURPOSE',score:28,needsEntity:true,evidence:['entity + purpose structure']});
+    if(/\b(?:what(?: is|'s)?|whats)\b.*\b(?:for|used for|meant for|purpose)\b/.test(nt) || /\bwhat does\b.*\b(?:do|help)\b/.test(nt))out.push({key:'PRODUCT_PURPOSE',label:'PRODUCT PURPOSE',score:28,needsEntity:true,evidence:['entity + purpose structure']});
     if(/\b(?:included|inside|contains|contain|comes with|what do i get|what do you get|what do u get|what is in|what's in|whats in)\b/.test(nt))out.push({key:'INCLUDED',label:'WHAT IS INCLUDED',score:30,needsEntity:true,evidence:['entity + inclusion structure']});
     if(/\b(?:available|availability|in stock|stock|still have|do you have one|got one|have one)\b/.test(nt))out.push({key:'AVAILABILITY',label:'AVAILABILITY',score:29,needsEntity:true,evidence:['entity + availability structure']});
     if(/\b(?:how much|price|cost|rate|fee|charge|expensive|cheap|cheaper)\b/.test(nt))out.push({key:'PRICE',label:'PRICE',score:29,needsEntity:true,evidence:['entity + price structure']});
     if(/\b(?:when|how long|delivery|deliver|shipping|ship|arrive|receive|get it|send it|today|tomorrow|instant)\b/.test(nt)&&/\b(?:get|receive|arrive|deliver|delivery|shipping|ship|send)\b/.test(nt))out.push({key:'DELIVERY',label:'DELIVERY',score:27,needsEntity:true,evidence:['entity + delivery structure']});
-    if(/\b(?:features|feature|capabilities|capability|what can|what does .* have|functions|tools)\b/.test(nt))out.push({key:'FEATURES',label:'FEATURES',score:28,needsEntity:true,evidence:['entity + feature structure']});
+    if(/\b(?:features|feature|capabilities|capability|what can|what does .* have|functions|tools|what functions|what can i do)\b/.test(nt))out.push({key:'FEATURES',label:'FEATURES',score:36,needsEntity:true,evidence:['entity + feature structure']});
     if(/\b(?:who is|who can|who should|suitable|appropriate|made for|designed for)\b/.test(nt))out.push({key:'AUDIENCE',label:'WHO IT IS FOR',score:27,needsEntity:true,evidence:['entity + audience structure']});
     if(/\b(?:custom|customize|customise|personalize|personalise|edit|changes)\b/.test(nt))out.push({key:'CUSTOMIZATION',label:'CUSTOMIZATION',score:27,needsEntity:true,evidence:['entity + customization structure']});
     if(/\b(?:compatible|compatibility|work on|works on|run on|supported)\b/.test(nt))out.push({key:'COMPATIBILITY',label:'COMPATIBILITY',score:27,needsEntity:true,evidence:['entity + compatibility structure']});
-    if(/\b(?:license|licence|commercial|resell|resale|usage rights|use rights)\b/.test(nt))out.push({key:'LICENSE',label:'LICENSE / USAGE',score:27,needsEntity:true,evidence:['entity + licensing structure']});
+    if(/\b(?:license|licence|commercial|commercially|commercial use|business use|resell|resale|usage rights|use rights|redistribute|redistribution)\b/.test(nt))out.push({key:'LICENSE',label:'LICENSE / USAGE',score:32,needsEntity:true,evidence:['entity + licensing structure']});
     if(/\b(?:refund|return|exchange|money back)\b/.test(nt))out.push({key:'REFUND',label:'REFUND / RETURN',score:27,needsEntity:true,evidence:['entity + refund structure']});
     if(/\b(?:discount|offer|deal|better price|lower price|bulk)\b/.test(nt))out.push({key:'DISCOUNT',label:'DISCOUNT',score:27,needsEntity:true,evidence:['entity + discount structure']});
     if(/\b(?:purchase|buy|order|get one|take one|place an order)\b/.test(nt))out.push({key:'PURCHASE',label:'PURCHASE',score:27,needsEntity:true,evidence:['entity + purchase structure']});
