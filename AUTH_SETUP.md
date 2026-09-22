@@ -1,0 +1,29 @@
+# TORI authentication setup
+
+The website is wired to the Supabase project `relay` and uses the public publishable key in `auth.html`.
+
+## Email authentication
+Email/password sign-up and sign-in are implemented in `app.js`. Supabase email confirmation behavior follows the project's Auth settings.
+
+## Google authentication
+In Supabase Dashboard → Authentication → Providers, enable Google and add the Google OAuth credentials requested by Supabase.
+
+Set the Supabase Auth Site URL to your deployed TORI origin and add this redirect URL:
+
+`https://devansh-ggw.github.io/TORI/auth.html`
+
+For a custom domain, add that domain's `/auth.html` URL as an additional redirect URL.
+
+## Age and terms
+The account page requires an age-range selection, a truthful age declaration, and acceptance of the Terms, Privacy Policy and Acceptable Use Policy before account creation or Google OAuth.
+
+The declaration is stored in Supabase user metadata for new OAuth/sign-up flows as:
+- `age_band`
+- `age_attested`
+- `terms_accepted_at`
+- `terms_version`
+
+This is a product-level eligibility flow, not a substitute for jurisdiction-specific legal requirements or server-side enforcement.
+
+## Important before launch
+Replace the placeholders in the legal pages with the real legal business name, addresses, contact emails, governing law and actual retention/deletion practices. Verify the Google provider configuration and redirect URLs before publishing the account feature.
