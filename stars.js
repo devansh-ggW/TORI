@@ -2,7 +2,7 @@
 "use strict";
 const c=document.getElementById("starfield");if(!c)return;const x=c.getContext("2d",{alpha:true});if(!x)return;
 let w=0,h=0,d=1,last=0,sy=0;const s=[],b=[];const p={x:-1e4,y:-1e4,on:false};
-function size(){d=Math.min(devicePixelRatio||1,1.25);w=innerWidth;h=innerHeight;c.width=Math.floor(w*d);c.height=Math.floor(h*d);x.setTransform(d,0,0,d,0,0);s.length=0;const n=w<700?240:420,world=Math.max(h,document.documentElement.scrollHeight||h);for(let i=0;i<n;i++)s.push({x:Math.random()*w,y:Math.random()*world,r:.35+Math.random()*.82,a:.22+Math.random()*.55,t:Math.random()*6.28,v:.15+Math.random()*.6})}
+function size(){d=Math.min(devicePixelRatio||1,1.25);w=innerWidth;h=innerHeight;c.width=Math.floor(w*d);c.height=Math.floor(h*d);x.setTransform(d,0,0,d,0,0);s.length=0;const n=w<700?360:700,world=Math.max(h,document.documentElement.scrollHeight||h);for(let i=0;i<n;i++)s.push({x:Math.random()*w,y:Math.random()*world,r:.35+Math.random()*.82,a:.22+Math.random()*.55,t:Math.random()*6.28,v:.15+Math.random()*.6})}
 addEventListener("mousemove",e=>{p.x=e.clientX;p.y=e.clientY;p.on=true},{passive:true});addEventListener("mouseleave",()=>p.on=false,{passive:true});
 addEventListener("click",e=>b.push({x:e.clientX,y:e.clientY,l:1}),{passive:true});addEventListener("touchstart",e=>{const q=e.touches&&e.touches[0];if(q){p.x=q.clientX;p.y=q.clientY;p.on=true;b.push({x:q.clientX,y:q.clientY,l:1})}},{passive:true});addEventListener("touchend",()=>p.on=false,{passive:true});
 addEventListener("resize",size,{passive:true});addEventListener("scroll",()=>sy=window.scrollY||0,{passive:true});
