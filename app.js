@@ -232,7 +232,222 @@ function clearPack(){if(!confirm('Clear all TORI local knowledge in this browser
 function resetResult(){$('confidence').textContent='—';$('status').textContent='WAITING';$('status').className='status neutral';$('intent').textContent='—';$('entity').textContent='—';$('evidence').textContent='—';$('missing').textContent='—';$('response').textContent='Add business knowledge and analyze a message.';$('explain').textContent='TORI will show the signals, facts and uncertainty used in its decision.';$('explain').className='explain neutral';$('intentStack').innerHTML='';$('evidenceStack').innerHTML=''}
 function toast(t){const x=$('toast');x.textContent=t;x.classList.add('show');clearTimeout(window.__toast);window.__toast=setTimeout(()=>x.classList.remove('show'),2300)}
 
-function initAuth(){if(!window.supabase||!window.TORI_SUPABASE||!$('authForm'))return;const client=window.supabase.createClient(window.TORI_SUPABASE.url,window.TORI_SUPABASE.key);let mode=new URLSearchParams(location.search).get('mode')==='signin'?'signin':'signup';const msg=(t,c='neutral')=>{const m=$('authMsg');m.textContent=t;m.className='authMsg '+c};const gate=()=>{if(!$('ageBand').value){msg('Select your age range before continuing.','warn');return false}if(!$('ageCheck').checked){msg('Confirm that your age information is truthful.','warn');return false}if(!$('termsCheck').checked){msg('Accept the Terms, Privacy Policy and Acceptable Use Policy.','warn');return false}return true};const sync=()=>{const signup=mode==='signup';$('nameField').hidden=!signup;$('ageFields').hidden=!signup;$('fullName').required=signup;$('ageBand').required=signup;$('ageCheck').required=signup;$('termsCheck').required=signup;$('password').autocomplete=signup?'new-password':'current-password';$('authSubmit').textContent=signup?'CREATE ACCOUNT':'SIGN IN';document.querySelectorAll('.authTab').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));msg(signup?'Create a TORI account with email and password.':'Sign in to your existing TORI account.');history.replaceState(null,'',`auth.html?mode=${signup?'signup':'signin'}`)};const show=session=>{const form=$('authForm'),box=$('signedIn');if(session?.user){form.hidden=true;box.hidden=false;$('signedEmail').textContent=session.user.email||'Authenticated account';msg('You are signed in.','good')}else{form.hidden=false;box.hidden=true}};document.querySelectorAll('.authTab').forEach(b=>b.onclick=()=>{mode=b.dataset.mode;sync()});$('authForm').onsubmit=async e=>{e.preventDefault();msg('Working…');const email=$('email').value.trim(),password=$('password').value;if(mode==='signup'){if(!gate())return;if(password.length<8){msg('Use a password with at least 8 characters.','warn');return}const {data,error}=await client.auth.signUp({email,password,options:{data:{full_name:$('fullName').value.trim(),age_band:$('ageBand').value,age_attested:true,terms_accepted_at:new Date().toISOString(),terms_version:'2026-09-22'}}});if(error){msg(error.message,'warn');return}if(data.session){show(data.session);msg('Account created and signed in.','good')}else msg('Account created. Check your email to confirm, then sign in.','good')}else{const {data,error}=await client.auth.signInWithPassword({email,password});if(error){msg(error.message,'warn');return}show(data.session)}};$('signOut').onclick=async()=>{await client.auth.signOut();show(null);sync();msg('Signed out.')};client.auth.getSession().then(({data})=>show(data.session));client.auth.onAuthStateChange((_event,session)=>show(session));sync()}
+function initAuth(){
+  if(!$('authForm'))return;
+  const msg=(t,c='neutral')=>{const m=$('authMsg');if(!m)return;m.textContent=t;m.className='authMsg '+c};
+  if(!window.supabase||!window.TORI_SUPABASE){
+    msg('Authentication is temporarily unavailable. Please try again later.','warn');
+    if($('authSubmit'))$('authSubmit').disabled=true;
+    return;
+  }
+  const client=window.supabase.createClient(window.TORI_SUPABASE.url,window.TORI_SUPABASE.key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+  let mode=new URLSearchParams(location.search).get('mode')==='signin'?'signin':'signup';
+  let recovery=false;
+  let pendingEmail='';
+  const siteUrl='https://tori.dewify.shop';
+  const signInUrl=siteUrl+'/auth.html?mode=signin';
+  const verificationUrl=siteUrl+'/auth.html?mode=signin&verified=1';
+
+  const isVerified=user=>Boolean(user?.email_confirmed_at||user?.confirmed_at);
+  const passwordOk=p=>p.length>=10&&p.length<=128;
+  const emailOk=e=>/^[^\\s@]+@[^\\s@]+\\.[^\\s@]{2,}$/i.test(e);
+  const friendlyError=error=>{
+    const m=String(error?.message||'Authentication failed.');
+    const low=m.toLowerCase();
+    if(low.includes('invalid login credentials'))return 'Email or password is incorrect.';
+    if(low.includes('email not confirmed'))return 'Confirm your email address before signing in.';
+    if(low.includes('user already registered'))return 'An account with this email already exists. Sign in instead.';
+    if(low.includes('password should be at least'))return 'Your password is too short.';
+    if(low.includes('rate limit'))return 'Too many attempts. Please wait a moment and try again.';
+    return m;
+  };
+  const setPending=email=>{
+    pendingEmail=email;
+    if($('pendingText'))$('pendingText').textContent=`We sent a confirmation link to ${email}. Confirm it before signing in.`;
+    if($('pendingConfirm'))$('pendingConfirm').hidden=false;
+    if($('authSubmit'))$('authSubmit').disabled=false;
+    if($('forgotPassword'))$('forgotPassword').hidden=true;
+  };
+  const clearPending=()=>{if($('pendingConfirm'))$('pendingConfirm').hidden=true};
+  const gate=()=>{
+    if(!$('ageBand').value){msg('Select your age range before continuing.','warn');return false}
+    if(!$('ageCheck').checked){msg('Confirm that your age information is truthful.','warn');return false}
+    if(!$('termsCheck').checked){msg('Accept the Terms, Privacy Policy and Acceptable Use Policy.','warn');return false}
+    return true;
+  };
+  const showSignedIn=session=>{
+    const user=session?.user;
+    if(!user)return false;
+    if(!isVerified(user)){
+      const email=user.email||pendingEmail;
+      client.auth.signOut().catch(()=>{});
+      setPending(email);
+      msg('Your email has not been confirmed yet. Check your inbox, then sign in.','warn');
+      return false;
+    }
+    $('authForm').hidden=true;
+    $('recoveryPanel').hidden=true;
+    $('signedIn').hidden=false;
+    $('signedEmail').textContent=user.email||'Authenticated account';
+    msg('You are authenticated.','good');
+    return true;
+  };
+  const showSignedOut=()=>{
+    $('authForm').hidden=false;
+    $('signedIn').hidden=true;
+    if($('recoveryPanel'))$('recoveryPanel').hidden=true;
+    if(!recovery) sync();
+  };
+  const showRecovery=()=>{
+    recovery=true;
+    $('authForm').hidden=true;
+    $('signedIn').hidden=true;
+    clearPending();
+    if($('recoveryPanel'))$('recoveryPanel').hidden=false;
+    msg('Choose a new password for your TORI account.','neutral');
+  };
+  const sync=()=>{
+    recovery=false;
+    const signup=mode==='signup';
+    $('nameField').hidden=!signup;
+    $('ageFields').hidden=!signup;
+    $('fullName').required=signup;
+    $('ageBand').required=signup;
+    $('ageCheck').required=signup;
+    $('termsCheck').required=signup;
+    $('password').required=true;
+    $('password').autocomplete=signup?'new-password':'current-password';
+    $('password').minLength=10;
+    $('authSubmit').disabled=false;
+    $('authSubmit').textContent=signup?'CREATE ACCOUNT':'SIGN IN';
+    $('forgotPassword').hidden=signup;
+    $('passwordHelp').textContent=signup?'Use 10+ characters. A mix of letters and numbers is recommended.':'Enter the password for this account.';
+    document.querySelectorAll('.authTab').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));
+    const verified=new URLSearchParams(location.search).get('verified');
+    msg(verified==='1'?'Email confirmed. Sign in to continue.':(signup?'Create a TORI account with email and password.':'Sign in to your existing TORI account.'));
+    history.replaceState(null,'',`auth.html?mode=${signup?'signup':'signin'}`);
+  };
+
+  document.querySelectorAll('.authTab').forEach(b=>b.onclick=()=>{
+    mode=b.dataset.mode;
+    clearPending();
+    $('email').value='';
+    $('password').value='';
+    sync();
+  });
+
+  $('authForm').onsubmit=async e=>{
+    e.preventDefault();
+    const email=$('email').value.trim().toLowerCase();
+    const password=$('password').value;
+    if(!emailOk(email)){msg('Enter a valid email address.','warn');$('email').focus();return}
+    if(!passwordOk(password)){msg('Use a password between 10 and 128 characters.','warn');$('password').focus();return}
+    if(mode==='signup'){
+      if(!gate())return;
+      const name=$('fullName').value.trim();
+      if(name.length<2){msg('Enter your name before creating an account.','warn');$('fullName').focus();return}
+      $('authSubmit').disabled=true;
+      msg('Creating your account…');
+      const {data,error}=await client.auth.signUp({
+        email,
+        password,
+        options:{
+          emailRedirectTo:verificationUrl,
+          data:{
+            full_name:name,
+            age_band:$('ageBand').value,
+            age_attested:true,
+            terms_accepted_at:new Date().toISOString(),
+            terms_version:'2026-09-22'
+          }
+        }
+      });
+      $('authSubmit').disabled=false;
+      if(error){msg(friendlyError(error),'warn');return}
+      pendingEmail=email;
+      if(data.user&&!isVerified(data.user)){
+        if(data.session)await client.auth.signOut().catch(()=>{});
+        setPending(email);
+        msg('Account created. Check your email and confirm the address before signing in.','good');
+      }else if(data.user&&isVerified(data.user)&&data.session){
+        showSignedIn(data.session);
+      }else{
+        setPending(email);
+        msg('Account created. Check your email and confirm the address before signing in.','good');
+      }
+    }else{
+      $('authSubmit').disabled=true;
+      msg('Signing you in…');
+      const {data,error}=await client.auth.signInWithPassword({email,password});
+      $('authSubmit').disabled=false;
+      if(error){msg(friendlyError(error),'warn');return}
+      if(!showSignedIn(data.session)){
+        pendingEmail=email;
+        msg('Confirm your email before signing in.','warn');
+      }
+    }
+  };
+
+  $('resendConfirm').onclick=async()=>{
+    if(!pendingEmail){pendingEmail=$('email').value.trim().toLowerCase()}
+    if(!emailOk(pendingEmail)){msg('Enter your email address first.','warn');return}
+    $('resendConfirm').disabled=true;
+    const {error}=await client.auth.resend({type:'signup',email:pendingEmail,options:{emailRedirectTo:verificationUrl}});
+    $('resendConfirm').disabled=false;
+    if(error){msg(friendlyError(error),'warn');return}
+    msg('A new confirmation email has been sent.','good');
+  };
+
+  $('forgotPassword').onclick=async()=>{
+    const email=$('email').value.trim().toLowerCase();
+    if(!emailOk(email)){msg('Enter your account email first.','warn');$('email').focus();return}
+    $('forgotPassword').disabled=true;
+    const {error}=await client.auth.resetPasswordForEmail(email,{redirectTo:signInUrl+'&mode=recovery'});
+    $('forgotPassword').disabled=false;
+    if(error){msg(friendlyError(error),'warn');return}
+    msg('If an account exists for that email, a password-reset link has been sent.','good');
+  };
+
+  $('updatePassword').onclick=async()=>{
+    const a=$('newPassword').value,b=$('confirmPassword').value;
+    if(!passwordOk(a)){msg('Use a password between 10 and 128 characters.','warn');return}
+    if(a!==b){msg('The passwords do not match.','warn');return}
+    $('updatePassword').disabled=true;
+    const {error}=await client.auth.updateUser({password:a});
+    $('updatePassword').disabled=false;
+    if(error){msg(friendlyError(error),'warn');return}
+    recovery=false;
+    await client.auth.signOut().catch(()=>{});
+    mode='signin';
+    $('newPassword').value='';
+    $('confirmPassword').value='';
+    sync();
+    msg('Password updated. Sign in with your new password.','good');
+  };
+
+  $('cancelRecovery').onclick=()=>{recovery=false;mode='signin';sync()};
+
+  $('signOut').onclick=async()=>{
+    await client.auth.signOut();
+    pendingEmail='';
+    showSignedOut();
+    msg('Signed out.','neutral');
+  };
+
+  client.auth.getSession().then(({data})=>{
+    if(data.session){
+      if(!showSignedIn(data.session)&&!recovery)showSignedOut();
+    }else showSignedOut();
+  }).catch(()=>showSignedOut());
+
+  client.auth.onAuthStateChange((event,session)=>{
+    if(event==='PASSWORD_RECOVERY'){showRecovery();return}
+    if(session)showSignedIn(session);else if(!recovery)showSignedOut();
+  });
+
+  sync();
+}
+
 function init(){
   document.querySelectorAll('[data-page]').forEach(a=>{if(a.getAttribute('href')===location.pathname.split('/').pop()||((!location.pathname.split('/').pop()||location.pathname.endsWith('/'))&&a.getAttribute('href')==='index.html'))a.classList.add('active')});
   $('menu')?.addEventListener('click',()=>{const m=$('menu'),n=$('navlinks'),open=n.classList.toggle('open');m.setAttribute('aria-expanded',String(open));});
