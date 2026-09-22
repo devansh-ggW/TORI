@@ -17,4 +17,4 @@ The declaration is stored in Supabase user metadata for new OAuth/sign-up flows 
 This is a product-level eligibility flow, not a substitute for jurisdiction-specific legal requirements or server-side enforcement.
 
 ## Important before launch
-Replace the placeholders in the legal pages with the real legal business name, addresses, contact emails, governing law and actual retention/deletion practices. Verify the Google provider configuration and redirect URLs before publishing the account feature.
+Replace the placeholders in the legal pages with the real legal business name, addresses, contact emails, governing law and actual retention/deletion practices. Verify the deployed TORI domain and Supabase email authentication settings before publishing the account feature.
