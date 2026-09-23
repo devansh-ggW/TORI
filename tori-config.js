@@ -1,0 +1,1 @@
+window.TORI_SUPABASE={url:"https://irutkjcwxpkjwoayuzij.supabase.co",key:"sb_publishable_zTHz2IQfIG6_8omOmR-TXw_4p1Ss6-U"};
