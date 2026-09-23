@@ -1,5 +1,6 @@
 const STORE='tori-knowledge-v4';
 const TORI_SITE_URL='https://tori.dewify.shop';
+const THEME_KEY='tori-theme';
 
 const INTENTS={
 BUSINESS_NAME:{label:'BUSINESS NAME',patterns:['what is your business name','what is ur business name','whats your business name','whats ur business name','what is the business name','whats the business name','business name','company name','name of your business','what is the company called','what do you call your business','what is your brand name','your brand name']},
@@ -310,6 +311,102 @@ function initAuth(){
   client.auth.onAuthStateChange((event,session)=>{if(event==="PASSWORD_RECOVERY"){state.recovery=true;hide(form,true);hide(signedIn,true);hide(pending,true);hide(profilePanel,true);hide(recoveryPanel,false);return}if(event==="SIGNED_IN"||event==="INITIAL_SESSION")setTimeout(()=>renderSession(session),0);if(event==="SIGNED_OUT"&&!state.pendingEmail&&!state.recovery)setTimeout(()=>{showForm();setMsg("Signed out.","neutral")},0)});
 }
 
+
+function initTheme(){
+  const root=document.documentElement;
+  if(!document.querySelector('.starfield')){
+    const field=document.createElement('div');field.className='starfield';field.setAttribute('aria-hidden','true');
+    const frag=document.createDocumentFragment();
+    for(let i=0;i<115;i++){
+      const s=document.createElement('span');
+      const left=(i*47)%100,top=(i*83+17)%100,size=i%17===0?2:i%5===0?1.5:1;
+      s.className='star';s.style.left=left+'%';s.style.top=top+'%';s.style.width=size+'px';s.style.height=size+'px';
+      s.style.setProperty('--star-opacity',(0.34+(i%7)*0.08).toFixed(2));s.style.animationDelay=(-((i*0.37)%7))+'s';
+      frag.appendChild(s);
+    }
+    field.appendChild(frag);document.body.prepend(field);
+  }
+  let theme=localStorage.getItem(THEME_KEY)||'light';
+  if(theme!=='dark'&&theme!=='light')theme='light';
+  const apply=()=>{
+    root.dataset.theme=theme;
+    const btn=document.querySelector('[data-theme-toggle]');
+    if(btn){const dark=theme==='dark';const icon=btn.querySelector('.themeIcon');if(icon)icon.textContent=dark?'☀':'☾';btn.title=dark?'Switch to light mode':'Switch to dark mode';btn.setAttribute('aria-label',btn.title);}
+  };
+  let btn=document.querySelector('[data-theme-toggle]');
+  if(!btn){
+    const actions=document.querySelector('.actions');
+    if(actions){
+      btn=document.createElement('button');btn.type='button';btn.className='themeToggle';btn.setAttribute('data-theme-toggle','true');
+      btn.innerHTML='<span class="themeIcon" aria-hidden="true">☾</span>';
+      const menu=actions.querySelector('#menu');if(menu)actions.insertBefore(btn,menu);else actions.appendChild(btn);
+      btn.addEventListener('click',()=>{theme=theme==='dark'?'light':'dark';localStorage.setItem(THEME_KEY,theme);apply();});
+    }
+  }
+  apply();
+}
+
+function initSourceConnectors(){
+  if(!$('messageList'))return;
+  const access=window.__TORI_ACCESS;if(!access)return;
+  const {client,user}=access,cfg=window.TORI_CONNECTORS||{},labels={whatsapp:'WhatsApp Business',instagram:'Instagram',messenger:'Messenger',telegram:'Telegram',email:'Email',website:'Website'};
+  let integrations=(access.profile?.integrations&&typeof access.profile.integrations==='object')?access.profile.integrations:{};
+  const validLink=(source,value)=>{
+    try{
+      const u=new URL(value);if(u.protocol!=='https:'&&u.protocol!=='http:')return false;
+      if(source==='whatsapp')return /(^|\.)wa\.me$|(^|\.)whatsapp\.com$/i.test(u.hostname);
+      if(source==='instagram')return /(^|\.)instagram\.com$/i.test(u.hostname);
+      return true;
+    }catch{return false}
+  };
+  const saveIntegrations=async next=>{
+    const {error}=await client.from('profiles').update({integrations:next,updated_at:new Date().toISOString()}).eq('id',user.id);
+    if(error){toast(error.message||'Could not save connection.');return false}
+    integrations=next;access.profile.integrations=next;return true;
+  };
+  let modal=document.querySelector('.connectorModal');
+  if(!modal){
+    modal=document.createElement('div');modal.className='connectorModal';modal.hidden=true;
+    modal.innerHTML='<div class="connectorDialog" role="dialog" aria-modal="true" aria-labelledby="connectorTitle"><div class="connectorDialogHead"><div><div class="kicker">TORI / CONNECTION</div><h3 id="connectorTitle">CONNECT CHANNEL</h3></div><button class="connectorClose" id="connectorClose" type="button" aria-label="Close">×</button></div><p id="connectorCopy"></p><div class="connectorOption"><strong>Platform authorization</strong><span id="connectorAuthStatus">Provider authorization is not configured yet.</span><div class="connectorActions"><button class="btn" id="connectorAuthorize" type="button">AUTHORIZE ACCOUNT</button></div></div><div class="connectorOption"><strong>Direct business link</strong><span>Save the public link you want TORI to open for this channel. This does not grant API message access.</span><input class="connectLinkInput" id="connectorLink" type="url" placeholder="https://…"><div class="connectorActions"><button class="btn dark" id="connectorSaveLink" type="button">SAVE LINK</button><button class="btn dark" id="connectorOpenLink" type="button" hidden>OPEN LINK</button></div><div class="connectHint" id="connectorHint">Use a secure HTTPS link from the official platform.</div></div><div class="connectHint">Authorization and message syncing are controlled by the platform. TORI never asks you to paste passwords or private access tokens here.</div></div>';
+    document.body.appendChild(modal);
+    modal.addEventListener('click',e=>{if(e.target===modal)modal.hidden=true;});
+    document.getElementById('connectorClose')?.addEventListener('click',()=>{modal.hidden=true;});
+  }
+  let active='';
+  const renderCards=()=>{
+    document.querySelectorAll('[data-source]').forEach(b=>{
+      const saved=!!integrations[b.dataset.source]?.link;
+      b.textContent=saved?'OPEN LINK':'CONNECT';
+      b.classList.toggle('linked',saved);b.classList.toggle('primary',!saved);
+    });
+  };
+  document.querySelectorAll('[data-source]').forEach(b=>b.addEventListener('click',()=>{
+    active=b.dataset.source;const name=labels[active]||active.toUpperCase(),item=integrations[active]||{},conf=cfg[active]||{};
+    document.getElementById('connectorTitle').textContent='CONNECT '+name.toUpperCase();
+    document.getElementById('connectorCopy').textContent='Choose platform authorization when TORI is configured for this provider, or save the business link now for a clean one-click workflow.';
+    document.getElementById('connectorLink').value=item.link||'';
+    document.getElementById('connectorOpenLink').hidden=!item.link;
+    const auth=document.getElementById('connectorAuthorize'),status=document.getElementById('connectorAuthStatus');
+    auth.disabled=!conf.authUrl;auth.textContent=conf.authUrl?'AUTHORIZE ACCOUNT':'AUTHORIZE · SETUP REQUIRED';
+    status.textContent=conf.authUrl?'Platform authorization is ready. The platform will ask you to approve access.':'The public site is ready for the OAuth flow, but the provider app credentials/authorization URL still need to be configured.';
+    modal.hidden=false;
+  }));
+  document.getElementById('connectorSaveLink')?.addEventListener('click',async()=>{
+    const value=document.getElementById('connectorLink').value.trim();
+    if(!active||!validLink(active,value)){toast('Enter a valid platform link.');return}
+    const next={...integrations,[active]:{link:value,linkedAt:new Date().toISOString(),mode:'link'}};
+    if(!await saveIntegrations(next))return;
+    document.getElementById('connectorOpenLink').hidden=false;renderCards();toast((labels[active]||active)+' link saved.');
+  });
+  document.getElementById('connectorOpenLink')?.addEventListener('click',()=>{
+    const value=integrations[active]?.link;if(value)window.open(value,'_blank','noopener,noreferrer');
+  });
+  document.getElementById('connectorAuthorize')?.addEventListener('click',()=>{
+    const url=cfg[active]?.authUrl;if(url)window.location.href=url;
+  });
+  renderCards();
+}
+
 function initProtectedPage(){
   if(document.body?.dataset.protected!=="true")return;
   ensureToriAccess(true).then(async x=>{
@@ -339,7 +436,7 @@ async function initMessages(){
   $("refreshMessages")?.addEventListener("click",async()=>{await load();await maybeAutoReply();await load();toast("Inbox refreshed.")});
   $("autoReplyToggle")?.addEventListener("change",async e=>{const enabled=e.target.checked,{error}=await client.from("profiles").update({auto_reply_enabled:enabled,updated_at:new Date().toISOString()}).eq("id",user.id);if(error){e.target.checked=!enabled;toast(error.message);return}state.profile.auto_reply_enabled=enabled;updateToggle(enabled);toast(enabled?"Auto reply enabled.":"Auto reply disabled.")});
   $("addManualMessage")?.addEventListener("click",async()=>{const body=$("manualMessage")?.value.trim()||"",source=$("manualSource")?.value||"manual",sender=$("manualSender")?.value.trim()||"Customer";if(!body){toast("Enter a customer message first.");return}const a=analyzeMsg({body});if(a.confidence<40||!a.intents?.length){toast("TORI kept this out: it does not look sufficiently business-related.");return}const auto=state.profile.auto_reply_enabled&&a.status==="good"&&!a.missing.length&&source==="manual";const {data,error}=await client.rpc("tori_store_message",{p_source:source,p_body:body,p_sender_name:sender,p_received_at:new Date().toISOString(),p_business_related:true,p_relevance_confidence:Math.max(40,a.confidence),p_reply_confidence:a.confidence,p_status:auto?"auto_replied":"review",p_reply_text:auto?a.response:null,p_metadata:{test:true,analysis_status:a.status,dispatch:"manual_test"}});if(error){toast(error.message||"Could not store message.");return}state.selected=data?.id||null;$("manualMessage").value="";$("manualSender").value="";await load();toast(auto?"Business message stored and auto-reply simulated for the local test flow.":"Business message stored for review.")});
-  document.querySelectorAll("[data-source]").forEach(b=>b.addEventListener("click",()=>toast(label(b.dataset.source)+" connection needs that platform's OAuth/webhook credentials. Those credentials stay out of this public repository.")));
+  initSourceConnectors();
   $("autoReplyToggle").checked=!!state.profile?.auto_reply_enabled;updateToggle(!!state.profile?.auto_reply_enabled);
   await load();await maybeAutoReply();await load();
 }
@@ -358,7 +455,7 @@ function init(){
   if($('exportPack'))$('exportPack').onclick=()=>{readProfile();const blob=new Blob([JSON.stringify(K,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='tori-knowledge.json';a.click();URL.revokeObjectURL(a.href);toast('Knowledge pack exported.')};
   if($('importFile'))$('importFile').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const x=JSON.parse(rd.result);if(!x.business||typeof x.business!=='object')throw new Error('Invalid');K=normalizePack(x);save();render();toast('Knowledge pack imported.')}catch{toast('Invalid TORI knowledge file.')}};rd.readAsText(f)};
   render();if($('incoming'))resetResult();
-  initAuth();initProtectedPage();initMessages();
+  initTheme();initAuth();initProtectedPage();initMessages();
 }
 window.TORI={analyze,load:()=>K,save,normalize,INTENTS,reset:()=>{K=blank();save();return K}};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
