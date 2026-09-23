@@ -104,3 +104,6 @@ body>header,body>main,body>footer{position:relative;z-index:1}
 [data-theme="dark"] .smallNote{color:var(--muted)}
 [data-theme="dark"] footer{color:var(--muted)}
 [data-theme="dark"] .starfield{opacity:.75}
+
+/* Keep native hidden panels truly hidden, including themed display rules. */
+[hidden]{display:none!important}
