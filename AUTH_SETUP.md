@@ -47,3 +47,20 @@ Verify the deployed site URL in Supabase Auth URL Configuration:
 `https://tori.dewify.shop`
 
 Also add that exact production URL to the Supabase redirect allow list and complete the Google provider configuration before advertising Google login.
+
+
+## Troubleshooting a Supabase URL error
+
+If authentication sends the browser to a URL shaped like:
+
+`https://irutkjcwxpkjwoayuzij.supabase.co/tori.dewify.shop#access_token=...`
+
+the Supabase Auth URL configuration is malformed. In the Supabase Dashboard, set the **Site URL** to exactly:
+
+`https://tori.dewify.shop`
+
+and add this exact production redirect URL:
+
+`https://tori.dewify.shop/auth.html`
+
+Do not enter `tori.dewify.shop` without `https://`. The Google provider still uses the Supabase callback URL shown by Supabase for Google Cloud configuration; the final redirect target is the TORI domain above.
