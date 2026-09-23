@@ -232,231 +232,92 @@ function clearPack(){if(!confirm('Clear all TORI local knowledge in this browser
 function resetResult(){$('confidence').textContent='—';$('status').textContent='WAITING';$('status').className='status neutral';$('intent').textContent='—';$('entity').textContent='—';$('evidence').textContent='—';$('missing').textContent='—';$('response').textContent='Add business knowledge and analyze a message.';$('explain').textContent='TORI will show the signals, facts and uncertainty used in its decision.';$('explain').className='explain neutral';$('intentStack').innerHTML='';$('evidenceStack').innerHTML=''}
 function toast(t){const x=$('toast');x.textContent=t;x.classList.add('show');clearTimeout(window.__toast);window.__toast=setTimeout(()=>x.classList.remove('show'),2300)}
 
-function initAuth(){
-  const form=$("authForm");
-  if(!form || !window.supabase || !window.TORI_SUPABASE) return;
-
-  const cfg=window.TORI_SUPABASE;
-  const client=window.supabase.createClient(cfg.url,cfg.key,{
-    auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}
-  });
-  window.TORI_AUTH=client;
-
-  const msg=$("authMsg"), submit=$("authSubmit"), tabs=[...document.querySelectorAll(".authTab")];
-  const nameField=$("nameField"), ageFields=$("ageFields"), ageBand=$("ageBand");
-  const ageCheck=$("ageCheck"), termsCheck=$("termsCheck"), forgot=$("forgotPassword");
-  const pending=$("pendingConfirm"), pendingText=$("pendingText"), resend=$("resendConfirm");
-  const recoveryPanel=$("recoveryPanel"), newPassword=$("newPassword"), confirmPassword=$("confirmPassword");
-  const updatePassword=$("updatePassword"), cancelRecovery=$("cancelRecovery");
-  const signedIn=$("signedIn"), signedEmail=$("signedEmail"), signOut=$("signOut");
-  const fullName=$("fullName"), email=$("email"), password=$("password");
-  const state={mode:new URLSearchParams(location.search).get("mode")==="signin"?"signin":"signup",pendingEmail:"",recovery:false};
-
-  const setMsg=(text,type="neutral")=>{
-    if(!msg) return;
-    msg.textContent=text;
-    msg.className="authMsg "+type;
-  };
-  const confirmed=user=>!!user && !!(user.email_confirmed_at || user.confirmed_at);
-  const hide=(node,yes=true)=>{if(node) node.hidden=yes;};
-  const showForm=()=>{
-    hide(form,false); hide(signedIn,true); hide(recoveryPanel,!state.recovery); hide(pending,!state.pendingEmail);
-    hide(nameField,state.mode!=="signup"); hide(ageFields,state.mode!=="signup"); hide(forgot,state.mode!=="signin");
-    if(password) password.autocomplete=state.mode==="signin"?"current-password":"new-password";
-    if(submit) submit.textContent=state.mode==="signin"?"SIGN IN":"CREATE ACCOUNT";
-    tabs.forEach(t=>t.classList.toggle("active",t.dataset.mode===state.mode));
-  };
-  const showPending=(mail)=>{
-    state.pendingEmail=mail||state.pendingEmail||email?.value.trim()||"";
-    hide(form,true); hide(signedIn,true); hide(recoveryPanel,true); hide(pending,false);
-    if(pendingText) pendingText.textContent=state.pendingEmail?
-      "A verification link was sent to "+state.pendingEmail+". Confirm that address before signing in.":
-      "Check your inbox for the confirmation link before signing in.";
-    setMsg("Email verification is required. You are NOT signed in.", "warn");
-  };
-  const showSigned=(user)=>{
-    state.pendingEmail="";
-    hide(form,true); hide(pending,true); hide(recoveryPanel,true); hide(signedIn,false);
-    if(signedEmail) signedEmail.textContent=user?.email||"Authenticated account";
-    setMsg("Signed in successfully.", "good");
-  };
-  const showSignedOut=(text)=>{
-    hide(signedIn,true);
-    hide(pending,!state.pendingEmail);
-    hide(recoveryPanel,!state.recovery);
-    hide(form,false);
-    setMsg(text||"You are not signed in.", "neutral");
-    showForm();
-  };
-
-  const forceLocalSignOut=async()=>{
-    try{ await client.auth.signOut({scope:"local"}); }
-    catch(_){ try{ await client.auth.signOut(); }catch(__){} }
-  };
-
-  const renderSession=async(session)=>{
-    const user=session?.user;
-    if(!session||!user){
-      showSignedOut(state.pendingEmail?"Email verification is required. You are NOT signed in.":"You are not signed in.");
-      return;
-    }
-    if(!confirmed(user)){
-      state.pendingEmail=user.email||state.pendingEmail;
-      showPending(state.pendingEmail);
-      setTimeout(()=>forceLocalSignOut(),0);
-      return;
-    }
-    if(state.recovery) return;
-    showSigned(user);
-  };
-
-  const setMode=(mode)=>{
-    state.mode=mode==="signin"?"signin":"signup";
-    state.pendingEmail="";
-    state.recovery=false;
-    if(location.search) history.replaceState(null,"","auth.html?mode="+state.mode);
-    showForm();
-    setMsg(state.mode==="signin"?"Sign in with your verified email and password.":"Create a TORI account, then verify your email before signing in.","neutral");
-  };
-
-  tabs.forEach(tab=>tab.addEventListener("click",()=>setMode(tab.dataset.mode)));
-  forgot?.addEventListener("click",async()=>{
-    const mail=email?.value.trim();
-    if(!mail){setMsg("Enter your email first, then choose FORGOT PASSWORD.","warn");email?.focus();return;}
-    setMsg("Sending password reset email…","neutral");
-    const {error}=await client.auth.resetPasswordForEmail(mail,{redirectTo:new URL("auth.html?mode=recovery",location.href).href});
-    if(error) setMsg(error.message||"Could not send reset email.","warn");
-    else setMsg("Password reset email sent. Open it, then choose a new password here.","good");
-  });
-
-  resend?.addEventListener("click",async()=>{
-    const mail=state.pendingEmail||email?.value.trim();
-    if(!mail){setMsg("Enter the account email before resending.","warn");return;}
-    resend.disabled=true;
-    const {error}=await client.auth.resend({type:"signup",email:mail});
-    resend.disabled=false;
-    if(error) setMsg(error.message||"Could not resend confirmation email.","warn");
-    else setMsg("A new confirmation email was sent to "+mail+".","good");
-  });
-
-  cancelRecovery?.addEventListener("click",()=>setMode("signin"));
-
-  updatePassword?.addEventListener("click",async()=>{
-    const p1=newPassword?.value||"",p2=confirmPassword?.value||"";
-    if(p1.length<10){setMsg("New password must be at least 10 characters.","warn");return;}
-    if(p1!==p2){setMsg("Passwords do not match.","warn");return;}
-    updatePassword.disabled=true;
-    const {error}=await client.auth.updateUser({password:p1});
-    updatePassword.disabled=false;
-    if(error){setMsg(error.message||"Could not update password.","warn");return;}
-    await forceLocalSignOut();
-    state.recovery=false;
-    state.mode="signin";
-    history.replaceState(null,"","auth.html?mode=signin");
-    showForm();
-    setMsg("Password updated. Sign in with the new password.","good");
-  });
-
-  signOut?.addEventListener("click",async()=>{
-    signOut.disabled=true;
-    await forceLocalSignOut();
-    signOut.disabled=false;
-    state.pendingEmail="";
-    state.recovery=false;
-    state.mode="signin";
-    history.replaceState(null,"","auth.html?mode=signin");
-    showForm();
-    setMsg("Signed out. Enter your credentials to sign in again.","good");
-  });
-
-  form.addEventListener("submit",async e=>{
-    e.preventDefault();
-    const mail=email?.value.trim(), pass=password?.value||"";
-    if(!mail||!pass){setMsg("Email and password are required.","warn");return;}
-    if(pass.length<10){setMsg("Password must be at least 10 characters.","warn");return;}
-
-    if(state.mode==="signup"){
-      if(!fullName?.value.trim()){setMsg("Enter your full name.","warn");fullName?.focus();return;}
-      if(!ageBand?.value){setMsg("Select your age range.","warn");return;}
-      if(!ageCheck?.checked||!termsCheck?.checked){setMsg("You must complete the age declaration and accept the policies.","warn");return;}
-    }
-
-    submit.disabled=true;
-    submit.textContent=state.mode==="signup"?"CREATING…":"SIGNING IN…";
-
-    if(state.mode==="signup"){
-      const {data,error}=await client.auth.signUp({
-        email:mail,password:pass,
-        options:{data:{
-          full_name:fullName.value.trim(),
-          age_band:ageBand.value,
-          age_attested:true,
-          terms_accepted_at:new Date().toISOString(),
-          terms_version:"2026-09-23"
-        }}
-      });
-      submit.disabled=false;
-
-      if(error){
-        setMsg(error.message||"Could not create account.","warn");
-        showForm();
-        return;
-      }
-
-      state.pendingEmail=data?.user?.email||mail;
-      await forceLocalSignOut();
-      showPending(state.pendingEmail);
-      return;
-    }
-
-    const {data,error}=await client.auth.signInWithPassword({email:mail,password:pass});
-    submit.disabled=false;
-    showForm();
-
-    if(error){
-      const text=error.message||"Sign in failed.";
-      if(/confirm|verified|verification/i.test(text)){
-        state.pendingEmail=mail;
-        showPending(mail);
-        setMsg("Your email is not verified yet. Confirm it first, then sign in.","warn");
-      }else setMsg(text,"warn");
-      return;
-    }
-
-    if(!data?.session||!confirmed(data.user)){
-      state.pendingEmail=data?.user?.email||mail;
-      await forceLocalSignOut();
-      showPending(state.pendingEmail);
-      return;
-    }
-
-    showSigned(data.user);
-  });
-
-  (async()=>{
-    const mode=new URLSearchParams(location.search).get("mode");
-    if(mode==="recovery"){
-      state.recovery=true; state.mode="signin";
-      hide(form,true); hide(signedIn,true); hide(pending,true); hide(recoveryPanel,false);
-      tabs.forEach(t=>t.classList.toggle("active",false));
-      return;
-    }
-    showForm();
-    const {data,error}=await client.auth.getSession();
-    if(error){showSignedOut("Session check failed. You are not signed in.");return;}
-    await renderSession(data.session);
-  })();
-
-  client.auth.onAuthStateChange((event,session)=>{
-    if(event==="PASSWORD_RECOVERY"){
-      state.recovery=true;
-      hide(form,true); hide(signedIn,true); hide(pending,true); hide(recoveryPanel,false);
-      return;
-    }
-    if(event==="SIGNED_OUT"&&!state.pendingEmail){showSignedOut("You are not signed in.");return;}
-    setTimeout(()=>renderSession(session),0);
-  });
+function getSupabaseClient(){
+  if(!window.supabase||!window.TORI_SUPABASE)return null;
+  if(window.__TORI_SUPABASE_CLIENT)return window.__TORI_SUPABASE_CLIENT;
+  window.__TORI_SUPABASE_CLIENT=window.supabase.createClient(window.TORI_SUPABASE.url,window.TORI_SUPABASE.key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+  return window.__TORI_SUPABASE_CLIENT;
 }
+function isAdultDate(value){
+  if(!value)return false;
+  const dob=new Date(value+"T00:00:00");if(Number.isNaN(dob.getTime()))return false;
+  const now=new Date();let age=now.getFullYear()-dob.getFullYear();
+  const before=now.getMonth()<dob.getMonth()||(now.getMonth()===dob.getMonth()&&now.getDate()<dob.getDate());if(before)age--;
+  return age>=18;
+}
+async function getToriProfile(client,user){
+  if(!client||!user)return null;
+  const {data}=await client.from("profiles").select("*").eq("id",user.id).maybeSingle();
+  return data||null;
+}
+async function ensureToriAccess(redirect=true){
+  const client=getSupabaseClient();if(!client)return null;
+  const {data}=await client.auth.getSession();if(!data?.session?.user){if(redirect)location.href="auth.html?mode=signin";return null}
+  const profile=await getToriProfile(client,data.session.user);
+  if(!profile?.age_verified){if(redirect)location.href="auth.html?mode=profile";return null}
+  return {client,user:data.session.user,profile};
+}
+
+function initAuth(){
+  const form=$("authForm"),client=getSupabaseClient();if(!form||!client)return;
+  const msg=$("authMsg"),submit=$("authSubmit"),tabs=[...document.querySelectorAll(".authTab")];
+  const nameField=$("nameField"),dobField=$("dobField"),ageAttest=$("ageAttest"),termsAttest=$("termsAttest");
+  const fullName=$("fullName"),dob=$("dateOfBirth"),email=$("email"),password=$("password"),ageCheck=$("ageCheck"),termsCheck=$("termsCheck");
+  const forgot=$("forgotPassword"),google=$("googleSignIn"),pending=$("pendingConfirm"),pendingText=$("pendingText"),resend=$("resendConfirm");
+  const profilePanel=$("profilePanel"),profileDob=$("profileDob"),profileAgeCheck=$("profileAgeCheck"),profileTermsCheck=$("profileTermsCheck"),completeProfile=$("completeProfile"),profileSignOut=$("profileSignOut");
+  const recoveryPanel=$("recoveryPanel"),newPassword=$("newPassword"),confirmPassword=$("confirmPassword"),updatePassword=$("updatePassword"),cancelRecovery=$("cancelRecovery");
+  const signedIn=$("signedIn"),signedEmail=$("signedEmail"),signOut=$("signOut");
+  const state={mode:new URLSearchParams(location.search).get("mode")==="signin"?"signin":"signup",pendingEmail:"",recovery:false};
+  const maxDob=()=>{const d=new Date();d.setFullYear(d.getFullYear()-18);const iso=d.toISOString().slice(0,10);if(dob)dob.max=iso;if(profileDob)profileDob.max=iso};maxDob();
+  const setMsg=(t,type="neutral")=>{if(msg){msg.textContent=t;msg.className="authMsg "+type}};
+  const hide=(n,v=true)=>{if(n)n.hidden=v};
+  const showForm=()=>{hide(form,false);hide(signedIn,true);hide(pending,true);hide(profilePanel,true);hide(recoveryPanel,!state.recovery);const signup=state.mode==="signup";hide(nameField,!signup);hide(dobField,!signup);hide(ageAttest,!signup);hide(termsAttest,!signup);hide(forgot,signup);if(password)password.autocomplete=signup?"new-password":"current-password";if(submit){submit.disabled=false;submit.textContent=signup?"CREATE ACCOUNT":"SIGN IN"}tabs.forEach(t=>t.classList.toggle("active",t.dataset.mode===state.mode))};
+  const signOutLocal=async()=>{try{await client.auth.signOut({scope:"local"})}catch(_){try{await client.auth.signOut()}catch(__){}}};
+  const showPending=mail=>{state.pendingEmail=mail||state.pendingEmail||email?.value.trim()||"";hide(form,true);hide(signedIn,true);hide(profilePanel,true);hide(recoveryPanel,true);hide(pending,false);if(pendingText)pendingText.textContent=state.pendingEmail?"A verification link was sent to "+state.pendingEmail+". Confirm the address, then sign in.":"Check your inbox for the verification link.";setMsg("Email verification is required. You are not signed in.","warn")};
+  const showSigned=user=>{state.pendingEmail="";hide(form,true);hide(pending,true);hide(profilePanel,true);hide(recoveryPanel,true);hide(signedIn,false);if(signedEmail)signedEmail.textContent=user?.email||"Authenticated account";setMsg("Signed in successfully.","good")};
+  const showProfile=async user=>{hide(form,true);hide(pending,true);hide(signedIn,true);hide(recoveryPanel,true);hide(profilePanel,false);const p=await getToriProfile(client,user);if(profileDob)profileDob.value=p?.date_of_birth||user?.user_metadata?.date_of_birth||"";setMsg("Confirm your age before TORI gives this account access.","warn")};
+  const verified=user=>!!user&&(!!user.email_confirmed_at||!!user.confirmed_at);
+  const renderSession=async session=>{const user=session?.user;if(!user){showForm();setMsg(state.mode==="signin"?"Sign in with your verified account.":"Create your TORI account. You must be 18 or older.","neutral");return}if(!verified(user)&&state.mode!=="signup"){state.pendingEmail=user.email||"";await signOutLocal();showPending(state.pendingEmail);return}const p=await getToriProfile(client,user);if(!p?.age_verified){showProfile(user);return}showSigned(user)};
+  const setMode=mode=>{state.mode=mode==="signin"?"signin":"signup";state.pendingEmail="";state.recovery=false;history.replaceState(null,"","auth.html?mode="+state.mode);showForm();setMsg(state.mode==="signin"?"Sign in with your verified email and password.":"Create your TORI account. You must be 18 or older.","neutral")};
+  tabs.forEach(t=>t.addEventListener("click",()=>setMode(t.dataset.mode)));
+  google?.addEventListener("click",async()=>{google.disabled=true;google.textContent="OPENING GOOGLE…";const {error}=await client.auth.signInWithOAuth({provider:"google",options:{redirectTo:new URL("auth.html",location.href).href,queryParams:{prompt:"select_account"}}});if(error){google.disabled=false;google.textContent="CONTINUE WITH GOOGLE";setMsg(error.message||"Google sign-in could not start.","warn")}});
+  forgot?.addEventListener("click",async()=>{const mail=email?.value.trim();if(!mail){setMsg("Enter your email first, then choose FORGOT PASSWORD.","warn");email?.focus();return}forgot.disabled=true;setMsg("Sending password reset email…","neutral");const {error}=await client.auth.resetPasswordForEmail(mail,{redirectTo:new URL("auth.html?mode=recovery",location.href).href});forgot.disabled=false;if(error)setMsg(error.message||"Could not send password reset email.","warn");else setMsg("Password reset email sent. Check your inbox.","good")});
+  resend?.addEventListener("click",async()=>{const mail=state.pendingEmail||email?.value.trim();if(!mail){setMsg("Enter the account email before resending.","warn");return}resend.disabled=true;const {error}=await client.auth.resend({type:"signup",email:mail});resend.disabled=false;if(error)setMsg(error.message||"Could not resend confirmation.","warn");else setMsg("A new confirmation email was sent to "+mail+".","good")});
+  completeProfile?.addEventListener("click",async()=>{const value=profileDob?.value||"";if(!isAdultDate(value)){setMsg("TORI is available only to people who are 18 or older.","warn");return}if(!profileAgeCheck?.checked||!profileTermsCheck?.checked){setMsg("Confirm your age and accept the policies to continue.","warn");return}const {data}=await client.auth.getSession(),user=data?.session?.user;if(!user){location.href="auth.html?mode=signin";return}completeProfile.disabled=true;completeProfile.textContent="VERIFYING…";const {error}=await client.from("profiles").upsert({id:user.id,full_name:user.user_metadata?.full_name||user.user_metadata?.name||user.email?.split("@")[0]||"TORI user",date_of_birth:value,age_verified:true,updated_at:new Date().toISOString()});completeProfile.disabled=false;completeProfile.textContent="CONTINUE TO TORI";if(error){setMsg(error.message||"Could not save age verification.","warn");return}history.replaceState(null,"","auth.html?mode=signin");showSigned(user)});
+  profileSignOut?.addEventListener("click",async()=>{await signOutLocal();location.href="auth.html?mode=signin"});
+  cancelRecovery?.addEventListener("click",()=>setMode("signin"));
+  updatePassword?.addEventListener("click",async()=>{const a=newPassword?.value||"",b=confirmPassword?.value||"";if(a.length<10){setMsg("New password must be at least 10 characters.","warn");return}if(a!==b){setMsg("Passwords do not match.","warn");return}updatePassword.disabled=true;const {error}=await client.auth.updateUser({password:a});updatePassword.disabled=false;if(error){setMsg(error.message||"Could not update password.","warn");return}await signOutLocal();history.replaceState(null,"","auth.html?mode=signin");state.recovery=false;showForm();setMsg("Password updated. Sign in with the new password.","good")});
+  signOut?.addEventListener("click",async()=>{signOut.disabled=true;await signOutLocal();signOut.disabled=false;state.mode="signin";history.replaceState(null,"","auth.html?mode=signin");showForm();setMsg("Signed out.","good")});
+  form.addEventListener("submit",async e=>{e.preventDefault();const mail=email?.value.trim()||"",pass=password?.value||"";if(!mail||!pass){setMsg("Email and password are required.","warn");return}if(pass.length<10){setMsg("Password must be at least 10 characters.","warn");return}if(state.mode==="signup"){if(!fullName?.value.trim()){setMsg("Enter your full name.","warn");fullName?.focus();return}if(!isAdultDate(dob?.value)){setMsg("TORI requires users to be 18 or older.","warn");return}if(!ageCheck?.checked||!termsCheck?.checked){setMsg("Confirm your age and accept the policies.","warn");return}}submit.disabled=true;submit.textContent=state.mode==="signup"?"CREATING…":"SIGNING IN…";if(state.mode==="signup"){const {data,error}=await client.auth.signUp({email:mail,password:pass,options:{data:{full_name:fullName.value.trim(),date_of_birth:dob.value,age_attested:true,terms_accepted_at:new Date().toISOString(),terms_version:"2026-09-23"}}});submit.disabled=false;if(error){setMsg(error.message||"Could not create account.","warn");return}state.pendingEmail=data?.user?.email||mail;await signOutLocal();showPending(state.pendingEmail);return}const {data,error}=await client.auth.signInWithPassword({email:mail,password:pass});submit.disabled=false;if(error){showForm();setMsg(error.message||"Sign in failed.","warn");return}await renderSession(data.session)});
+  (async()=>{maxDob();const mode=new URLSearchParams(location.search).get("mode");if(mode==="recovery"){state.recovery=true;hide(form,true);hide(pending,true);hide(signedIn,true);hide(profilePanel,true);hide(recoveryPanel,false);tabs.forEach(t=>t.classList.remove("active"));return}if(mode==="profile"){const {data}=await client.auth.getSession();if(data?.session?.user)await showProfile(data.session.user);else{history.replaceState(null,"","auth.html?mode=signin");showForm()}return}showForm();const {data}=await client.auth.getSession();await renderSession(data.session)})();
+  client.auth.onAuthStateChange((event,session)=>{if(event==="PASSWORD_RECOVERY"){state.recovery=true;hide(form,true);hide(signedIn,true);hide(pending,true);hide(profilePanel,true);hide(recoveryPanel,false);return}if(event==="SIGNED_IN"||event==="INITIAL_SESSION")setTimeout(()=>renderSession(session),0);if(event==="SIGNED_OUT"&&!state.pendingEmail&&!state.recovery)setTimeout(()=>{showForm();setMsg("Signed out.","neutral")},0)});
+}
+
+function initProtectedPage(){if(document.body?.dataset.protected!=="true")return;ensureToriAccess(true).then(x=>{window.__TORI_ACCESS=x||null})}
+async function initMessages(){
+  if(!$("messageList")||document.body?.dataset.protected!=="true")return;
+  const access=window.__TORI_ACCESS||await ensureToriAccess(true);if(!access)return;
+  const {client,user}=access,state={messages:[],selected:null,filter:"all",profile:access.profile};
+  const limits=p=>p==="premium"?100:p==="pro"?25:5;
+  const label=s=>({whatsapp:"WHATSAPP",instagram:"INSTAGRAM",messenger:"MESSENGER",telegram:"TELEGRAM",email:"EMAIL",website:"WEBSITE",manual:"MANUAL"}[s]||String(s||"SOURCE").toUpperCase());
+  const fmt=v=>{try{return new Intl.DateTimeFormat(undefined,{dateStyle:"medium",timeStyle:"short"}).format(new Date(v))}catch{return String(v||"")}};
+  const txt=(id,v)=>{const e=$(id);if(e)e.textContent=v};
+  const updateToggle=enabled=>{const n=document.querySelector(".toggleRow .smallNote");if(n)n.textContent=enabled?"Auto replies only run for confident, grounded answers. Turn this off anytime.":"Auto reply is OFF. Messages stay in review until you reply manually."};
+  const analyzeMsg=m=>{try{return analyze(m.body)}catch{return{confidence:0,status:"neutral",response:"",missing:["analysis"],intents:[]}}};
+  const load=async()=>{const {data,error}=await client.from("messages").select("*").order("received_at",{ascending:false}).limit(150);if(error){toast(error.message||"Could not load messages.");return}state.messages=data||[];txt("storedCount",state.messages.length+" / "+limits(state.profile?.plan));txt("replyCount",state.messages.filter(x=>["auto_replied","manual_reply"].includes(x.status)).length+" / "+limits(state.profile?.plan));txt("planName",(state.profile?.plan||"free").toUpperCase());renderList();renderDetail()};
+  const visible=()=>state.filter==="all"?state.messages:state.messages.filter(x=>x.status===state.filter);
+  const renderList=()=>{const list=$("messageList"),items=visible();txt("inboxCount",items.length);if(!items.length){list.innerHTML='<div class="emptyState">No messages in this view.</div>';return}list.innerHTML=items.map(x=>{const tag=x.status==="review"?'<span class="tag red">REVIEW</span>':x.status==="auto_replied"?'<span class="tag green">AUTO-REPLIED</span>':x.status==="manual_reply"?'<span class="tag green">REPLIED</span>':'<span class="tag gray">'+esc(String(x.status||"OPEN").toUpperCase())+'</span>';return '<div class="messageItem'+(state.selected===x.id?" active":"")+'" data-message-id="'+x.id+'"><div class="messageItemTop"><div class="messageSender">'+esc(x.sender_name||x.sender_handle||"Customer")+'</div><div class="messageTime">'+esc(fmt(x.received_at))+'</div></div><div class="messagePreview">'+esc(x.body)+'</div><div class="tagRow"><span class="tag gray">'+esc(label(x.source))+'</span>'+tag+'</div></div>'}).join("");list.querySelectorAll("[data-message-id]").forEach(el=>el.onclick=()=>{state.selected=el.dataset.messageId;renderList();renderDetail()})};
+  const renderDetail=()=>{const box=$("detailBody"),m=state.messages.find(x=>x.id===state.selected);if(!m){txt("detailTitle","SELECT A MESSAGE");txt("detailStatus","—");box.innerHTML='<div class="emptyState">Select a message from the inbox to review it.</div>';return}txt("detailTitle",m.sender_name||m.sender_handle||"Customer");txt("detailStatus",label(m.source)+" · "+String(m.status||"OPEN").toUpperCase());const a=analyzeMsg(m),tag=m.status==="review"?'<span class="tag red">RED · REVIEW REQUIRED</span>':m.status==="auto_replied"?'<span class="tag green">AUTO-REPLIED</span>':'<span class="tag gray">'+esc(String(m.status||"OPEN").toUpperCase())+'</span>';box.innerHTML='<div class="messageMeta"><span>'+esc(label(m.source))+'</span><span>'+esc(fmt(m.received_at))+'</span><span>BUSINESS '+Number(m.relevance_confidence||0)+'%</span><span>REPLY '+Number(a.confidence||m.reply_confidence||0)+'%</span></div><div class="tagRow">'+tag+'</div><div class="messageBody">'+esc(m.body)+'</div><div class="replyBox"><div class="field"><label>TORI RESPONSE</label><textarea id="replyDraft" placeholder="Write a response or use TORI draft.">'+esc(m.reply_text||a.response||"")+'</textarea></div><div class="replyActions"><button class="btn" id="sendManualReply">MARK REPLIED</button><button class="btn dark" id="useToriDraft">USE TORI DRAFT</button><button class="mini" id="ignoreMessage">IGNORE</button></div><div class="helper">'+(a.status==="good"?"TORI has enough configured facts for a grounded draft.":"TORI is not confident enough to auto-answer this message; review it before sending.")+'</div></div>';$("useToriDraft")?.addEventListener("click",()=>{$("replyDraft").value=a.response||""});$("ignoreMessage")?.addEventListener("click",async()=>{const {error}=await client.from("messages").update({status:"ignored"}).eq("id",m.id);if(error){toast(error.message);return}m.status="ignored";renderList();renderDetail();toast("Message moved out of the active inbox.")});$("sendManualReply")?.addEventListener("click",async()=>{const t=$("replyDraft").value.trim();if(!t){toast("Write a reply first.");return}const {data,error}=await client.rpc("tori_mark_reply",{p_message_id:m.id,p_reply_text:t,p_status:"manual_reply"});if(error){toast(error.message);return}Object.assign(m,data);renderList();renderDetail();toast("Reply recorded. A live channel connector is required to dispatch it externally.")})};
+  const maybeAutoReply=async()=>{if(!state.profile?.auto_reply_enabled)return;const pending=state.messages.filter(x=>x.business_related&&x.status==="review"&&x.source==="manual");for(const m of pending){const a=analyzeMsg(m);if(a.status!=="good"||!a.response||a.missing.length)continue;const {data,error}=await client.rpc("tori_mark_reply",{p_message_id:m.id,p_reply_text:a.response,p_status:"auto_replied"});if(!error&&data){Object.assign(m,data)}}};
+  document.querySelectorAll("[data-filter]").forEach(b=>b.addEventListener("click",()=>{state.filter=b.dataset.filter;document.querySelectorAll("[data-filter]").forEach(x=>x.classList.toggle("active",x===b));renderList()}));
+  $("refreshMessages")?.addEventListener("click",async()=>{await load();await maybeAutoReply();await load();toast("Inbox refreshed.")});
+  $("autoReplyToggle")?.addEventListener("change",async e=>{const enabled=e.target.checked,{error}=await client.from("profiles").update({auto_reply_enabled:enabled,updated_at:new Date().toISOString()}).eq("id",user.id);if(error){e.target.checked=!enabled;toast(error.message);return}state.profile.auto_reply_enabled=enabled;updateToggle(enabled);toast(enabled?"Auto reply enabled.":"Auto reply disabled.")});
+  $("addManualMessage")?.addEventListener("click",async()=>{const body=$("manualMessage")?.value.trim()||"",source=$("manualSource")?.value||"manual",sender=$("manualSender")?.value.trim()||"Customer";if(!body){toast("Enter a customer message first.");return}const a=analyzeMsg({body});if(a.confidence<40||!a.intents?.length){toast("TORI kept this out: it does not look sufficiently business-related.");return}const auto=state.profile.auto_reply_enabled&&a.status==="good"&&!a.missing.length&&source==="manual";const {data,error}=await client.rpc("tori_store_message",{p_source:source,p_body:body,p_sender_name:sender,p_received_at:new Date().toISOString(),p_business_related:true,p_relevance_confidence:Math.max(40,a.confidence),p_reply_confidence:a.confidence,p_status:auto?"auto_replied":"review",p_reply_text:auto?a.response:null,p_metadata:{test:true,analysis_status:a.status,dispatch:"manual_test"}});if(error){toast(error.message||"Could not store message.");return}state.selected=data?.id||null;$("manualMessage").value="";$("manualSender").value="";await load();toast(auto?"Business message stored and auto-reply simulated for the local test flow.":"Business message stored for review.")});
+  document.querySelectorAll("[data-source]").forEach(b=>b.addEventListener("click",()=>toast(label(b.dataset.source)+" connection needs that platform's OAuth/webhook credentials. Those credentials stay out of this public repository.")));
+  $("autoReplyToggle").checked=!!state.profile?.auto_reply_enabled;updateToggle(!!state.profile?.auto_reply_enabled);
+  await load();await maybeAutoReply();await load();
+}
+
 
 function init(){
   document.querySelectorAll('[data-page]').forEach(a=>{if(a.getAttribute('href')===location.pathname.split('/').pop()||((!location.pathname.split('/').pop()||location.pathname.endsWith('/'))&&a.getAttribute('href')==='index.html'))a.classList.add('active')});
@@ -471,7 +332,7 @@ function init(){
   if($('exportPack'))$('exportPack').onclick=()=>{readProfile();const blob=new Blob([JSON.stringify(K,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='tori-knowledge.json';a.click();URL.revokeObjectURL(a.href);toast('Knowledge pack exported.')};
   if($('importFile'))$('importFile').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const x=JSON.parse(rd.result);if(!x.business||typeof x.business!=='object')throw new Error('Invalid');K=normalizePack(x);save();render();toast('Knowledge pack imported.')}catch{toast('Invalid TORI knowledge file.')}};rd.readAsText(f)};
   render();if($('incoming'))resetResult();
-  initAuth();
+  initAuth();initProtectedPage();initMessages();
 }
 window.TORI={analyze,load:()=>K,save,normalize,INTENTS,reset:()=>{K=blank();save();return K}};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
