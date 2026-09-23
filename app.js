@@ -233,219 +233,229 @@ function resetResult(){$('confidence').textContent='—';$('status').textContent
 function toast(t){const x=$('toast');x.textContent=t;x.classList.add('show');clearTimeout(window.__toast);window.__toast=setTimeout(()=>x.classList.remove('show'),2300)}
 
 function initAuth(){
-  if(!$('authForm'))return;
-  const msg=(t,c='neutral')=>{const m=$('authMsg');if(!m)return;m.textContent=t;m.className='authMsg '+c};
-  if(!window.supabase||!window.TORI_SUPABASE){
-    msg('Authentication is temporarily unavailable. Please try again later.','warn');
-    if($('authSubmit'))$('authSubmit').disabled=true;
-    return;
-  }
-  const client=window.supabase.createClient(window.TORI_SUPABASE.url,window.TORI_SUPABASE.key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
-  let mode=new URLSearchParams(location.search).get('mode')==='signin'?'signin':'signup';
-  let recovery=false;
-  let pendingEmail='';
-  const siteUrl='https://tori.dewify.shop';
-  const signInUrl=siteUrl+'/auth.html?mode=signin';
-  const verificationUrl=siteUrl+'/auth.html?mode=signin&verified=1';
+  const form=$("authForm");
+  if(!form || !window.supabase || !window.TORI_SUPABASE) return;
 
-  const isVerified=user=>Boolean(user?.email_confirmed_at||user?.confirmed_at);
-  const passwordOk=p=>p.length>=10&&p.length<=128;
-  const emailOk=e=>/^[^\\s@]+@[^\\s@]+\\.[^\\s@]{2,}$/i.test(e);
-  const friendlyError=error=>{
-    const m=String(error?.message||'Authentication failed.');
-    const low=m.toLowerCase();
-    if(low.includes('invalid login credentials'))return 'Email or password is incorrect.';
-    if(low.includes('email not confirmed'))return 'Confirm your email address before signing in.';
-    if(low.includes('user already registered'))return 'An account with this email already exists. Sign in instead.';
-    if(low.includes('password should be at least'))return 'Your password is too short.';
-    if(low.includes('rate limit'))return 'Too many attempts. Please wait a moment and try again.';
-    return m;
+  const cfg=window.TORI_SUPABASE;
+  const client=window.supabase.createClient(cfg.url,cfg.key,{
+    auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}
+  });
+  window.TORI_AUTH=client;
+
+  const msg=$("authMsg"), submit=$("authSubmit"), tabs=[...document.querySelectorAll(".authTab")];
+  const nameField=$("nameField"), ageFields=$("ageFields"), ageBand=$("ageBand");
+  const ageCheck=$("ageCheck"), termsCheck=$("termsCheck"), forgot=$("forgotPassword");
+  const pending=$("pendingConfirm"), pendingText=$("pendingText"), resend=$("resendConfirm");
+  const recoveryPanel=$("recoveryPanel"), newPassword=$("newPassword"), confirmPassword=$("confirmPassword");
+  const updatePassword=$("updatePassword"), cancelRecovery=$("cancelRecovery");
+  const signedIn=$("signedIn"), signedEmail=$("signedEmail"), signOut=$("signOut");
+  const fullName=$("fullName"), email=$("email"), password=$("password");
+  const state={mode:new URLSearchParams(location.search).get("mode")==="signin"?"signin":"signup",pendingEmail:"",recovery:false};
+
+  const setMsg=(text,type="neutral")=>{
+    if(!msg) return;
+    msg.textContent=text;
+    msg.className="authMsg "+type;
   };
-  const setPending=email=>{
-    pendingEmail=email;
-    if($('pendingText'))$('pendingText').textContent=`We sent a confirmation link to ${email}. Confirm it before signing in.`;
-    if($('pendingConfirm'))$('pendingConfirm').hidden=false;
-    if($('authSubmit'))$('authSubmit').disabled=false;
-    if($('forgotPassword'))$('forgotPassword').hidden=true;
+  const confirmed=user=>!!user && !!(user.email_confirmed_at || user.confirmed_at);
+  const hide=(node,yes=true)=>{if(node) node.hidden=yes;};
+  const showForm=()=>{
+    hide(form,false); hide(signedIn,true); hide(recoveryPanel,!state.recovery); hide(pending,!state.pendingEmail);
+    hide(nameField,state.mode!=="signup"); hide(ageFields,state.mode!=="signup"); hide(forgot,state.mode!=="signin");
+    if(password) password.autocomplete=state.mode==="signin"?"current-password":"new-password";
+    if(submit) submit.textContent=state.mode==="signin"?"SIGN IN":"CREATE ACCOUNT";
+    tabs.forEach(t=>t.classList.toggle("active",t.dataset.mode===state.mode));
   };
-  const clearPending=()=>{if($('pendingConfirm'))$('pendingConfirm').hidden=true};
-  const gate=()=>{
-    if(!$('ageBand').value){msg('Select your age range before continuing.','warn');return false}
-    if(!$('ageCheck').checked){msg('Confirm that your age information is truthful.','warn');return false}
-    if(!$('termsCheck').checked){msg('Accept the Terms, Privacy Policy and Acceptable Use Policy.','warn');return false}
-    return true;
+  const showPending=(mail)=>{
+    state.pendingEmail=mail||state.pendingEmail||email?.value.trim()||"";
+    hide(form,true); hide(signedIn,true); hide(recoveryPanel,true); hide(pending,false);
+    if(pendingText) pendingText.textContent=state.pendingEmail?
+      "A verification link was sent to "+state.pendingEmail+". Confirm that address before signing in.":
+      "Check your inbox for the confirmation link before signing in.";
+    setMsg("Email verification is required. You are NOT signed in.", "warn");
   };
-  const showSignedIn=session=>{
+  const showSigned=(user)=>{
+    state.pendingEmail="";
+    hide(form,true); hide(pending,true); hide(recoveryPanel,true); hide(signedIn,false);
+    if(signedEmail) signedEmail.textContent=user?.email||"Authenticated account";
+    setMsg("Signed in successfully.", "good");
+  };
+  const showSignedOut=(text)=>{
+    hide(signedIn,true);
+    hide(pending,!state.pendingEmail);
+    hide(recoveryPanel,!state.recovery);
+    hide(form,false);
+    setMsg(text||"You are not signed in.", "neutral");
+    showForm();
+  };
+
+  const forceLocalSignOut=async()=>{
+    try{ await client.auth.signOut({scope:"local"}); }
+    catch(_){ try{ await client.auth.signOut(); }catch(__){} }
+  };
+
+  const renderSession=async(session)=>{
     const user=session?.user;
-    if(!user)return false;
-    if(!isVerified(user)){
-      const email=user.email||pendingEmail;
-      client.auth.signOut().catch(()=>{});
-      setPending(email);
-      msg('Your email has not been confirmed yet. Check your inbox, then sign in.','warn');
-      return false;
+    if(!session||!user){
+      showSignedOut(state.pendingEmail?"Email verification is required. You are NOT signed in.":"You are not signed in.");
+      return;
     }
-    $('authForm').hidden=true;
-    $('recoveryPanel').hidden=true;
-    $('signedIn').hidden=false;
-    $('signedEmail').textContent=user.email||'Authenticated account';
-    msg('You are authenticated.','good');
-    return true;
-  };
-  const showSignedOut=()=>{
-    $('authForm').hidden=false;
-    $('signedIn').hidden=true;
-    if($('recoveryPanel'))$('recoveryPanel').hidden=true;
-    if(!recovery) sync();
-  };
-  const showRecovery=()=>{
-    recovery=true;
-    $('authForm').hidden=true;
-    $('signedIn').hidden=true;
-    clearPending();
-    if($('recoveryPanel'))$('recoveryPanel').hidden=false;
-    msg('Choose a new password for your TORI account.','neutral');
-  };
-  const sync=()=>{
-    recovery=false;
-    const signup=mode==='signup';
-    $('nameField').hidden=!signup;
-    $('ageFields').hidden=!signup;
-    $('fullName').required=signup;
-    $('ageBand').required=signup;
-    $('ageCheck').required=signup;
-    $('termsCheck').required=signup;
-    $('password').required=true;
-    $('password').autocomplete=signup?'new-password':'current-password';
-    $('password').minLength=10;
-    $('authSubmit').disabled=false;
-    $('authSubmit').textContent=signup?'CREATE ACCOUNT':'SIGN IN';
-    $('forgotPassword').hidden=signup;
-    $('passwordHelp').textContent=signup?'Use 10+ characters. A mix of letters and numbers is recommended.':'Enter the password for this account.';
-    document.querySelectorAll('.authTab').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));
-    const verified=new URLSearchParams(location.search).get('verified');
-    msg(verified==='1'?'Email confirmed. Sign in to continue.':(signup?'Create a TORI account with email and password.':'Sign in to your existing TORI account.'));
-    history.replaceState(null,'',`auth.html?mode=${signup?'signup':'signin'}`);
+    if(!confirmed(user)){
+      state.pendingEmail=user.email||state.pendingEmail;
+      showPending(state.pendingEmail);
+      setTimeout(()=>forceLocalSignOut(),0);
+      return;
+    }
+    if(state.recovery) return;
+    showSigned(user);
   };
 
-  document.querySelectorAll('.authTab').forEach(b=>b.onclick=()=>{
-    mode=b.dataset.mode;
-    clearPending();
-    $('email').value='';
-    $('password').value='';
-    sync();
+  const setMode=(mode)=>{
+    state.mode=mode==="signin"?"signin":"signup";
+    state.pendingEmail="";
+    state.recovery=false;
+    if(location.search) history.replaceState(null,"","auth.html?mode="+state.mode);
+    showForm();
+    setMsg(state.mode==="signin"?"Sign in with your verified email and password.":"Create a TORI account, then verify your email before signing in.","neutral");
+  };
+
+  tabs.forEach(tab=>tab.addEventListener("click",()=>setMode(tab.dataset.mode)));
+  forgot?.addEventListener("click",async()=>{
+    const mail=email?.value.trim();
+    if(!mail){setMsg("Enter your email first, then choose FORGOT PASSWORD.","warn");email?.focus();return;}
+    setMsg("Sending password reset email…","neutral");
+    const {error}=await client.auth.resetPasswordForEmail(mail,{redirectTo:new URL("auth.html?mode=recovery",location.href).href});
+    if(error) setMsg(error.message||"Could not send reset email.","warn");
+    else setMsg("Password reset email sent. Open it, then choose a new password here.","good");
   });
 
-  $('authForm').onsubmit=async e=>{
+  resend?.addEventListener("click",async()=>{
+    const mail=state.pendingEmail||email?.value.trim();
+    if(!mail){setMsg("Enter the account email before resending.","warn");return;}
+    resend.disabled=true;
+    const {error}=await client.auth.resend({type:"signup",email:mail});
+    resend.disabled=false;
+    if(error) setMsg(error.message||"Could not resend confirmation email.","warn");
+    else setMsg("A new confirmation email was sent to "+mail+".","good");
+  });
+
+  cancelRecovery?.addEventListener("click",()=>setMode("signin"));
+
+  updatePassword?.addEventListener("click",async()=>{
+    const p1=newPassword?.value||"",p2=confirmPassword?.value||"";
+    if(p1.length<10){setMsg("New password must be at least 10 characters.","warn");return;}
+    if(p1!==p2){setMsg("Passwords do not match.","warn");return;}
+    updatePassword.disabled=true;
+    const {error}=await client.auth.updateUser({password:p1});
+    updatePassword.disabled=false;
+    if(error){setMsg(error.message||"Could not update password.","warn");return;}
+    await forceLocalSignOut();
+    state.recovery=false;
+    state.mode="signin";
+    history.replaceState(null,"","auth.html?mode=signin");
+    showForm();
+    setMsg("Password updated. Sign in with the new password.","good");
+  });
+
+  signOut?.addEventListener("click",async()=>{
+    signOut.disabled=true;
+    await forceLocalSignOut();
+    signOut.disabled=false;
+    state.pendingEmail="";
+    state.recovery=false;
+    state.mode="signin";
+    history.replaceState(null,"","auth.html?mode=signin");
+    showForm();
+    setMsg("Signed out. Enter your credentials to sign in again.","good");
+  });
+
+  form.addEventListener("submit",async e=>{
     e.preventDefault();
-    const email=$('email').value.trim().toLowerCase();
-    const password=$('password').value;
-    if(!emailOk(email)){msg('Enter a valid email address.','warn');$('email').focus();return}
-    if(!passwordOk(password)){msg('Use a password between 10 and 128 characters.','warn');$('password').focus();return}
-    if(mode==='signup'){
-      if(!gate())return;
-      const name=$('fullName').value.trim();
-      if(name.length<2){msg('Enter your name before creating an account.','warn');$('fullName').focus();return}
-      $('authSubmit').disabled=true;
-      msg('Creating your account…');
-      const {data,error}=await client.auth.signUp({
-        email,
-        password,
-        options:{
-          emailRedirectTo:verificationUrl,
-          data:{
-            full_name:name,
-            age_band:$('ageBand').value,
-            age_attested:true,
-            terms_accepted_at:new Date().toISOString(),
-            terms_version:'2026-09-22'
-          }
-        }
-      });
-      $('authSubmit').disabled=false;
-      if(error){msg(friendlyError(error),'warn');return}
-      pendingEmail=email;
-      if(data.user&&!isVerified(data.user)){
-        if(data.session)await client.auth.signOut().catch(()=>{});
-        setPending(email);
-        msg('Account created. Check your email and confirm the address before signing in.','good');
-      }else if(data.user&&isVerified(data.user)&&data.session){
-        showSignedIn(data.session);
-      }else{
-        setPending(email);
-        msg('Account created. Check your email and confirm the address before signing in.','good');
-      }
-    }else{
-      $('authSubmit').disabled=true;
-      msg('Signing you in…');
-      const {data,error}=await client.auth.signInWithPassword({email,password});
-      $('authSubmit').disabled=false;
-      if(error){msg(friendlyError(error),'warn');return}
-      if(!showSignedIn(data.session)){
-        pendingEmail=email;
-        msg('Confirm your email before signing in.','warn');
-      }
+    const mail=email?.value.trim(), pass=password?.value||"";
+    if(!mail||!pass){setMsg("Email and password are required.","warn");return;}
+    if(pass.length<10){setMsg("Password must be at least 10 characters.","warn");return;}
+
+    if(state.mode==="signup"){
+      if(!fullName?.value.trim()){setMsg("Enter your full name.","warn");fullName?.focus();return;}
+      if(!ageBand?.value){setMsg("Select your age range.","warn");return;}
+      if(!ageCheck?.checked||!termsCheck?.checked){setMsg("You must complete the age declaration and accept the policies.","warn");return;}
     }
-  };
 
-  $('resendConfirm').onclick=async()=>{
-    if(!pendingEmail){pendingEmail=$('email').value.trim().toLowerCase()}
-    if(!emailOk(pendingEmail)){msg('Enter your email address first.','warn');return}
-    $('resendConfirm').disabled=true;
-    const {error}=await client.auth.resend({type:'signup',email:pendingEmail,options:{emailRedirectTo:verificationUrl}});
-    $('resendConfirm').disabled=false;
-    if(error){msg(friendlyError(error),'warn');return}
-    msg('A new confirmation email has been sent.','good');
-  };
+    submit.disabled=true;
+    submit.textContent=state.mode==="signup"?"CREATING…":"SIGNING IN…";
 
-  $('forgotPassword').onclick=async()=>{
-    const email=$('email').value.trim().toLowerCase();
-    if(!emailOk(email)){msg('Enter your account email first.','warn');$('email').focus();return}
-    $('forgotPassword').disabled=true;
-    const {error}=await client.auth.resetPasswordForEmail(email,{redirectTo:siteUrl+'/auth.html?mode=signin&recovery=1'});
-    $('forgotPassword').disabled=false;
-    if(error){msg(friendlyError(error),'warn');return}
-    msg('If an account exists for that email, a password-reset link has been sent.','good');
-  };
+    if(state.mode==="signup"){
+      const {data,error}=await client.auth.signUp({
+        email:mail,password:pass,
+        options:{data:{
+          full_name:fullName.value.trim(),
+          age_band:ageBand.value,
+          age_attested:true,
+          terms_accepted_at:new Date().toISOString(),
+          terms_version:"2026-09-23"
+        }}
+      });
+      submit.disabled=false;
 
-  $('updatePassword').onclick=async()=>{
-    const a=$('newPassword').value,b=$('confirmPassword').value;
-    if(!passwordOk(a)){msg('Use a password between 10 and 128 characters.','warn');return}
-    if(a!==b){msg('The passwords do not match.','warn');return}
-    $('updatePassword').disabled=true;
-    const {error}=await client.auth.updateUser({password:a});
-    $('updatePassword').disabled=false;
-    if(error){msg(friendlyError(error),'warn');return}
-    recovery=false;
-    await client.auth.signOut().catch(()=>{});
-    mode='signin';
-    $('newPassword').value='';
-    $('confirmPassword').value='';
-    sync();
-    msg('Password updated. Sign in with your new password.','good');
-  };
+      if(error){
+        setMsg(error.message||"Could not create account.","warn");
+        showForm();
+        return;
+      }
 
-  $('cancelRecovery').onclick=()=>{recovery=false;mode='signin';sync()};
+      state.pendingEmail=data?.user?.email||mail;
+      await forceLocalSignOut();
+      showPending(state.pendingEmail);
+      return;
+    }
 
-  $('signOut').onclick=async()=>{
-    await client.auth.signOut();
-    pendingEmail='';
-    showSignedOut();
-    msg('Signed out.','neutral');
-  };
+    const {data,error}=await client.auth.signInWithPassword({email:mail,password:pass});
+    submit.disabled=false;
+    showForm();
 
-  client.auth.getSession().then(({data})=>{
-    if(data.session){
-      if(!showSignedIn(data.session)&&!recovery)showSignedOut();
-    }else showSignedOut();
-  }).catch(()=>showSignedOut());
+    if(error){
+      const text=error.message||"Sign in failed.";
+      if(/confirm|verified|verification/i.test(text)){
+        state.pendingEmail=mail;
+        showPending(mail);
+        setMsg("Your email is not verified yet. Confirm it first, then sign in.","warn");
+      }else setMsg(text,"warn");
+      return;
+    }
+
+    if(!data?.session||!confirmed(data.user)){
+      state.pendingEmail=data?.user?.email||mail;
+      await forceLocalSignOut();
+      showPending(state.pendingEmail);
+      return;
+    }
+
+    showSigned(data.user);
+  });
+
+  (async()=>{
+    const mode=new URLSearchParams(location.search).get("mode");
+    if(mode==="recovery"){
+      state.recovery=true; state.mode="signin";
+      hide(form,true); hide(signedIn,true); hide(pending,true); hide(recoveryPanel,false);
+      tabs.forEach(t=>t.classList.toggle("active",false));
+      return;
+    }
+    showForm();
+    const {data,error}=await client.auth.getSession();
+    if(error){showSignedOut("Session check failed. You are not signed in.");return;}
+    await renderSession(data.session);
+  })();
 
   client.auth.onAuthStateChange((event,session)=>{
-    if(event==='PASSWORD_RECOVERY'){showRecovery();return}
-    if(session)showSignedIn(session);else if(!recovery)showSignedOut();
+    if(event==="PASSWORD_RECOVERY"){
+      state.recovery=true;
+      hide(form,true); hide(signedIn,true); hide(pending,true); hide(recoveryPanel,false);
+      return;
+    }
+    if(event==="SIGNED_OUT"&&!state.pendingEmail){showSignedOut("You are not signed in.");return;}
+    setTimeout(()=>renderSession(session),0);
   });
-
-  sync();
 }
 
 function init(){
