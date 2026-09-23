@@ -48,7 +48,23 @@ function load(){try{return normalizePack(JSON.parse(localStorage.getItem(STORE))
 let K=load();
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-function save(){localStorage.setItem(STORE,JSON.stringify(K))}
+let cloudSaveTimer=null;
+function save(){
+  localStorage.setItem(STORE,JSON.stringify(K));
+  const access=window.__TORI_ACCESS;
+  if(!access?.client||!access?.user)return;
+  clearTimeout(cloudSaveTimer);
+  cloudSaveTimer=setTimeout(async()=>{
+    try{
+      const {error}=await access.client.from("profiles").update({
+        business_name:K.business?.name||null,
+        knowledge:K,
+        updated_at:new Date().toISOString()
+      }).eq("id",access.user.id);
+      if(error)console.warn("TORI cloud knowledge sync:",error.message);
+    }catch(e){console.warn("TORI cloud knowledge sync failed:",e)}
+  },350);
+}
 function clean(s){return String(s??'').toLowerCase().replace(/[“”"'`]/g,' ').replace(/[^a-z0-9₹$€£+\-/#.\s]/g,' ').replace(/\s+/g,' ').trim()}
 function normalize(s){let x=clean(s);x=x.split(' ').map(w=>TYPO[w]||w).join(' ');for(let i=0;i<2;i++)x=x.split(' ').map(w=>SLANG[w]||w).join(' ');return x}
 function words(s){return normalize(s).split(' ').filter(Boolean)}
@@ -293,11 +309,20 @@ function initAuth(){
   client.auth.onAuthStateChange((event,session)=>{if(event==="PASSWORD_RECOVERY"){state.recovery=true;hide(form,true);hide(signedIn,true);hide(pending,true);hide(profilePanel,true);hide(recoveryPanel,false);return}if(event==="SIGNED_IN"||event==="INITIAL_SESSION")setTimeout(()=>renderSession(session),0);if(event==="SIGNED_OUT"&&!state.pendingEmail&&!state.recovery)setTimeout(()=>{showForm();setMsg("Signed out.","neutral")},0)});
 }
 
-function initProtectedPage(){if(document.body?.dataset.protected!=="true")return;ensureToriAccess(true).then(x=>{window.__TORI_ACCESS=x||null})}
+function initProtectedPage(){
+  if(document.body?.dataset.protected!=="true")return;
+  ensureToriAccess(true).then(async x=>{
+    window.__TORI_ACCESS=x||null;
+    if(x?.profile?.knowledge&&typeof x.profile.knowledge==="object"&&Object.keys(x.profile.knowledge).length){
+      K=normalizePack(x.profile.knowledge);save();render();
+    }
+  });
+}
 async function initMessages(){
   if(!$("messageList")||document.body?.dataset.protected!=="true")return;
   const access=window.__TORI_ACCESS||await ensureToriAccess(true);if(!access)return;
   const {client,user}=access,state={messages:[],selected:null,filter:"all",profile:access.profile};
+  if(state.profile?.knowledge&&typeof state.profile.knowledge==="object"&&Object.keys(state.profile.knowledge).length)K=normalizePack(state.profile.knowledge);
   const limits=p=>p==="premium"?100:p==="pro"?25:5;
   const label=s=>({whatsapp:"WHATSAPP",instagram:"INSTAGRAM",messenger:"MESSENGER",telegram:"TELEGRAM",email:"EMAIL",website:"WEBSITE",manual:"MANUAL"}[s]||String(s||"SOURCE").toUpperCase());
   const fmt=v=>{try{return new Intl.DateTimeFormat(undefined,{dateStyle:"medium",timeStyle:"short"}).format(new Date(v))}catch{return String(v||"")}};
