@@ -346,9 +346,9 @@ function initTheme(){
   apply();
 }
 
-function initSourceConnectors(){
+function initSourceConnectors(accessArg){
   if(!$('messageList'))return;
-  const access=window.__TORI_ACCESS;if(!access)return;
+  const access=accessArg||window.__TORI_ACCESS;if(!access)return;
   const {client,user}=access,cfg=window.TORI_CONNECTORS||{},labels={whatsapp:'WhatsApp Business',instagram:'Instagram',messenger:'Messenger',telegram:'Telegram',email:'Email',website:'Website'};
   let integrations=(access.profile?.integrations&&typeof access.profile.integrations==='object')?access.profile.integrations:{};
   const validLink=(source,value)=>{
@@ -436,7 +436,7 @@ async function initMessages(){
   $("refreshMessages")?.addEventListener("click",async()=>{await load();await maybeAutoReply();await load();toast("Inbox refreshed.")});
   $("autoReplyToggle")?.addEventListener("change",async e=>{const enabled=e.target.checked,{error}=await client.from("profiles").update({auto_reply_enabled:enabled,updated_at:new Date().toISOString()}).eq("id",user.id);if(error){e.target.checked=!enabled;toast(error.message);return}state.profile.auto_reply_enabled=enabled;updateToggle(enabled);toast(enabled?"Auto reply enabled.":"Auto reply disabled.")});
   $("addManualMessage")?.addEventListener("click",async()=>{const body=$("manualMessage")?.value.trim()||"",source=$("manualSource")?.value||"manual",sender=$("manualSender")?.value.trim()||"Customer";if(!body){toast("Enter a customer message first.");return}const a=analyzeMsg({body});if(a.confidence<40||!a.intents?.length){toast("TORI kept this out: it does not look sufficiently business-related.");return}const auto=state.profile.auto_reply_enabled&&a.status==="good"&&!a.missing.length&&source==="manual";const {data,error}=await client.rpc("tori_store_message",{p_source:source,p_body:body,p_sender_name:sender,p_received_at:new Date().toISOString(),p_business_related:true,p_relevance_confidence:Math.max(40,a.confidence),p_reply_confidence:a.confidence,p_status:auto?"auto_replied":"review",p_reply_text:auto?a.response:null,p_metadata:{test:true,analysis_status:a.status,dispatch:"manual_test"}});if(error){toast(error.message||"Could not store message.");return}state.selected=data?.id||null;$("manualMessage").value="";$("manualSender").value="";await load();toast(auto?"Business message stored and auto-reply simulated for the local test flow.":"Business message stored for review.")});
-  initSourceConnectors();
+  initSourceConnectors(access);
   $("autoReplyToggle").checked=!!state.profile?.auto_reply_enabled;updateToggle(!!state.profile?.auto_reply_enabled);
   await load();await maybeAutoReply();await load();
 }
