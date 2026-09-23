@@ -6,15 +6,9 @@ The website is wired to the Supabase project `tori` and uses its public publisha
 
 Email/password sign-up and sign-in are implemented in `app.js`. Keep Supabase email confirmation enabled so a newly created email account must verify ownership before access.
 
-## Google authentication
+## Account authentication
 
-The account page calls Supabase Auth's Google OAuth flow with the production redirect:
-
-`https://tori.dewify.shop/auth.html`
-
-In the Supabase Dashboard for project `tori`, enable the Google provider and configure its Google OAuth Client ID and Client Secret. In Google Cloud, add the TORI site as an authorized JavaScript origin and add the Supabase project's Google callback URL shown in the Supabase provider settings.
-
-The frontend implementation is already present. Provider credentials are intentionally not stored in this public repository.
+TORI uses email/password authentication. Email sign-ups require verification before access. Google sign-in is not part of the current product flow.
 
 ## Age and eligibility
 
