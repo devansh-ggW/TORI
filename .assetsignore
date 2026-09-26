@@ -1,0 +1,9 @@
+.git
+.github
+.gitignore
+worker.js
+wrangler.toml
+migrations/
+AUTH_SETUP.md
+CLOUDFLARE_SETUP.md
+README.md
