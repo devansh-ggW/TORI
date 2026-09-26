@@ -367,7 +367,11 @@ function initAuth(){
         },1800);
       }
     }catch(err){
-      setMsg(err.message||"Could not resend the verification email.","warn");
+      if(err.data?.email_verified){
+        setMsg("This email is already verified. No verification email was sent.","neutral");
+      }else{
+        setMsg(err.message||"Could not resend the verification email.","warn");
+      }
     }finally{
       resendVerification.disabled=false;
       resendVerification.textContent="RESEND VERIFICATION";
