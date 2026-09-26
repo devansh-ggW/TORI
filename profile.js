@@ -69,6 +69,24 @@
   canvas?.addEventListener("pointermove",e=>{if(!state.drawing)return;state.offsetX+=e.clientX-state.lastX;state.offsetY+=e.clientY-state.lastY;state.lastX=e.clientX;state.lastY=e.clientY;draw();setDirty(true)});
   canvas?.addEventListener("pointerup",()=>state.drawing=false);
   canvas?.addEventListener("pointercancel",()=>state.drawing=false);
+  $("deleteAccount")?.addEventListener("click",async()=>{
+    const confirmed=window.confirm("Delete your ReplyFlix account permanently? This removes your profile, knowledge, messages, sessions, and profile picture.");
+    if(!confirmed)return;
+    const password=window.prompt("Enter your current password to confirm deletion:");
+    if(password===null)return;
+    const phrase=window.prompt('Type DELETE MY ACCOUNT to confirm:');
+    if(phrase!=="DELETE MY ACCOUNT"){setMessage("Account deletion cancelled. Confirmation text did not match.","warn");return}
+    const btn=$("deleteAccount");btn.disabled=true;btn.textContent="DELETING…";
+    try{
+      await window.ReplyFlix.apiFetch("/account",{method:"DELETE",body:JSON.stringify({password,confirmation:phrase})});
+      try{sessionStorage.removeItem("replyflix_session")}catch{}
+      window.__REPLYFLIX_ACCESS=null;
+      setMessage("Account deleted. Redirecting to sign up…","good");
+      setTimeout(()=>location.href="auth.html?mode=signup",500);
+    }catch(err){
+      btn.disabled=false;btn.textContent="DELETE ACCOUNT";setMessage(err.message||"Could not delete account.","warn");
+    }
+  });
   $("saveChanges")?.addEventListener("click",async()=>{
     if(!state.dirty)return;
     const api=accessApi();if(!api)return;
