@@ -83,6 +83,20 @@ async function ensureSchema(env){
   if(!(profileColumns.results||[]).some(x=>x.name==="avatar_data_url")){
     await env.DB.prepare("ALTER TABLE profiles ADD COLUMN avatar_data_url TEXT").run();
   }
+  const userTable=await env.DB.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").first();
+  const userSql=String(userTable?.sql||"").toLowerCase().replace(/\\s+/g," ");
+  const emailIsUnique=/email\\s+text\\s+not\\s+null\\s+unique/.test(userSql)||/unique\\s*\\(\\s*email\\s*\\)/.test(userSql);
+  if(emailIsUnique){
+    await env.DB.batch([
+      env.DB.prepare("PRAGMA defer_foreign_keys=ON"),
+      env.DB.prepare("CREATE TABLE users_rebuild (id TEXT PRIMARY KEY,email TEXT NOT NULL,password_hash TEXT NOT NULL,password_salt TEXT NOT NULL,full_name TEXT NOT NULL,date_of_birth TEXT NOT NULL,age_verified INTEGER NOT NULL DEFAULT 0,email_verified INTEGER NOT NULL DEFAULT 0,email_verification_token_hash TEXT,email_verification_expires_at TEXT,email_verification_sent_at TEXT,email_verification_email_id TEXT,account_confirmation_token_hash TEXT,account_confirmation_expires_at TEXT,account_confirmation_sent_at TEXT,account_confirmation_email_id TEXT,terms_accepted_at TEXT,terms_version TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL)"),
+      env.DB.prepare("INSERT INTO users_rebuild(id,email,password_hash,password_salt,full_name,date_of_birth,age_verified,email_verified,email_verification_token_hash,email_verification_expires_at,email_verification_sent_at,email_verification_email_id,account_confirmation_token_hash,account_confirmation_expires_at,account_confirmation_sent_at,account_confirmation_email_id,terms_accepted_at,terms_version,created_at,updated_at) SELECT id,email,password_hash,password_salt,full_name,date_of_birth,age_verified,email_verified,email_verification_token_hash,email_verification_expires_at,email_verification_sent_at,email_verification_email_id,account_confirmation_token_hash,account_confirmation_expires_at,account_confirmation_sent_at,account_confirmation_email_id,terms_accepted_at,terms_version,created_at,updated_at FROM users"),
+      env.DB.prepare("DROP TABLE users"),
+      env.DB.prepare("ALTER TABLE users_rebuild RENAME TO users")
+    ]);
+  }
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)").run();
+
 }
 
 function htmlEscape(v){return String(v??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
@@ -213,7 +227,10 @@ async function verificationEmailStatus(request,env){
   const email=String(p.email||"").trim().toLowerCase();
   if(!emailId||!validEmail(email))return response({error:"Verification email ID and email are required."},400,request,env);
 
-  const user=await env.DB.prepare("SELECT email,email_verification_sent_at FROM users WHERE email=? LIMIT 1").bind(email).first();
+  const accountId=String(p.account_id||"").trim();
+  const user=accountId
+    ? await env.DB.prepare("SELECT email,email_verification_sent_at FROM users WHERE id=? AND email=? LIMIT 1").bind(accountId,email).first()
+    : await env.DB.prepare("SELECT email,email_verification_sent_at FROM users WHERE email=? ORDER BY created_at DESC LIMIT 1").bind(email).first();
   if(!user)return response({error:"Unable to check verification email status."},404,request,env);
 
   // Only allow checking an email ID within the current verification window.
