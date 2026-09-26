@@ -61,7 +61,7 @@ async function apiFetch(path,options={}){
   if(token&&!headers.has('authorization'))headers.set('authorization','Bearer '+token);
   const res=await fetch(REPLYFLIX_API_BASE+path,{...options,headers,credentials:'include'});
   let data=null;try{data=await res.json()}catch{}
-  if(!res.ok){const err=new Error(data?.error||('Request failed ('+res.status+')'));err.status=res.status;throw err}
+  if(!res.ok){const message=data?.stage?(data.error+' ['+data.stage+']'+(data.detail?' — '+data.detail:'')):data?.error||('Request failed ('+res.status+')');const err=new Error(message);err.status=res.status;err.data=data;throw err}
   return data;
 }
 function save(){
