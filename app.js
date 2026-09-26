@@ -352,7 +352,10 @@ function initAuth(){
     resendVerification.textContent="SENDING…";
     try{
       const data=await apiFetch("/auth/resend-verification",{method:"POST",body:JSON.stringify({email:mail})});
-      setMsg(data?.message||"A new verification email has been sent.","good");
+      const detail=data?.email_id
+        ? "Email accepted by Resend. ID: "+data.email_id+(data.email_from?" · From: "+data.email_from:"")
+        : (data?.message||"A new verification email has been sent.");
+      setMsg(detail,"good");
     }catch(err){
       setMsg(err.message||"Could not resend the verification email.","warn");
     }finally{
@@ -397,7 +400,9 @@ function initAuth(){
               : "Your account was created, but the verification email could not be sent. Use RESEND VERIFICATION."
           );
           setMsg(
-            sent ? "Verification email accepted by the mail provider." : "Verification email was not sent. Please use RESEND VERIFICATION.",
+            sent
+              ? "Verification email accepted by Resend"+(data?.email_id?". ID: "+data.email_id:"")+(data?.email_from?" · From: "+data.email_from:"")
+              : "Verification email was not sent. Please use RESEND VERIFICATION.",
             sent?"neutral":"warn"
           );
         }
