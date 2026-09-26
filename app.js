@@ -312,6 +312,7 @@ function initAuth(){
   };
 
   const showExistingAccount=(mail)=>{
+    if(email)email.value=mail||email.value;
     if(tabsWrap)tabsWrap.style.display="none";
     hide(form,true);hide(signedIn,true);hide(verificationState,true);hide(existingConfirmationState,true);hide(existingAccountState,false);
     if(existingAccountChoice)existingAccountChoice.textContent="An account already uses "+mail+". Continue with that account or create another account using the same email?";
@@ -347,6 +348,7 @@ function initAuth(){
 
   const setMode=mode=>{
     state.mode=mode==="signin"?"signin":"signup";
+    state.allowDuplicateEmail=false;
     history.replaceState(null,"","auth.html?mode="+state.mode);
     showForm();
     setMsg(state.mode==="signin"?"Sign in with your account.":"Create your ReplyFlix account. You must be 18 or older.","neutral");
