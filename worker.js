@@ -31,7 +31,7 @@ function sessionCookie(token,maxAge=SESSION_DAYS*86400){return COOKIE_NAME+"="+e
 function clearCookie(){return COOKIE_NAME+"=; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=0"}
 function parseJson(v,fallback={}){try{return v?JSON.parse(v):fallback}catch{return fallback}}
 function age(dob){const d=new Date(String(dob||"")+"T00:00:00");if(Number.isNaN(d.getTime()))return -1;const n=new Date();let a=n.getFullYear()-d.getFullYear();if(n.getMonth()<d.getMonth()||(n.getMonth()===d.getMonth()&&n.getDate()<d.getDate()))a--;return a}
-function validEmail(v){return /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(v)}
+function validEmail(v){return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)}
 function profileOut(r){return{user_id:r.user_id,business_name:r.business_name||null,knowledge:parseJson(r.knowledge_json,{}),integrations:parseJson(r.integrations_json,{}),auto_reply_enabled:!!r.auto_reply_enabled,plan:r.plan||"free",created_at:r.created_at,updated_at:r.updated_at}}
 
 async function newSession(env,userId){
@@ -143,7 +143,7 @@ async function changePassword(request,env){
 }
 export default {async fetch(request,env){
   if(request.method==="OPTIONS")return new Response(null,{status:204,headers:corsHeaders(request,env)});
-  const path=new URL(request.url).pathname.replace(/\\/+$/,"")||"/";
+  const path=new URL(request.url).pathname.replace(/\/+$/,"")||"/";
   try{
     if(path==="/health"&&request.method==="GET")return response({ok:true,service:"replyflix-api"},200,request,env);
     if(path==="/api/auth/signup"&&request.method==="POST")return signup(request,env);
