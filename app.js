@@ -380,7 +380,7 @@ function initAuth(){
       if(err.data?.email_verified){
         setMsg("This email is already verified. No verification email was sent.","neutral");
       }else{
-        setMsg(err.message||"Could not resend the verification email.","warn");
+        setMsg("Resend failed: "+(err.data?.delivery_error||err.message||"Unknown error"),"warn");
       }
     }finally{
       resendVerification.disabled=false;
@@ -493,7 +493,7 @@ function initAuth(){
         setMsg(
           sent
             ? (err.data.message||"Check your inbox to verify your email before continuing.")
-            : (err.data.message||"The verification email could not be sent. You can retry from this screen."),
+            : ("Resend failed: "+(err.data?.delivery_error||err.data.message||"Unknown error")),
           sent?"neutral":"warn"
         );
         return;
