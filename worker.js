@@ -154,6 +154,6 @@ export default {async fetch(request,env){
     if(path==="/api/profile"&&(request.method==="GET"||request.method==="PUT"))return profile(request,env);
     if(path==="/api/messages"&&(request.method==="GET"||request.method==="POST"))return messages(request,env);
     if(path.startsWith("/api/messages/")&&request.method==="PATCH")return messagePatch(request,env,path.slice(14));
-    return response({error:"Not found."},404,request,env);
+    return env.ASSETS.fetch(request);
   }catch(err){console.error(err);return response({error:"Internal server error."},500,request,env)}
 }};
