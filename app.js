@@ -446,9 +446,12 @@ function initSiteAuthControls(){
     if(menu)actions.insertBefore(box,menu);else actions.appendChild(box);
   }
   const render=authenticated=>{
-    box.innerHTML=authenticated
-      ? '<a class="btn dark" href="profile.html">PROFILE</a>'
-      : '<a class="btn dark" href="auth.html?mode=signin">SIGN IN</a><a class="btn" href="auth.html?mode=signup">SIGN UP</a>';
+    if(authenticated){
+      const avatar=window.__REPLYFLIX_ACCESS?.profile?.avatar_data_url||"";
+      box.innerHTML='<a class="profileMini" href="profile.html" aria-label="Profile"><span class="profileMiniImage">'+(avatar?'<img src="'+avatar+'" alt="">':'<span class="profileMiniFallback">R</span>')+'</span><span class="btn dark profileMiniButton">PROFILE</span></a>';
+    }else{
+      box.innerHTML='<a class="btn dark" href="auth.html?mode=signin">SIGN IN</a><a class="btn" href="auth.html?mode=signup">SIGN UP</a>';
+    }
   };
   render(!!window.__REPLYFLIX_ACCESS?.user);
   const sync=async()=>{
