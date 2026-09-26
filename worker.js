@@ -265,10 +265,21 @@ async function resendVerification(request,env){
   const email=String(p.email||"").trim().toLowerCase();
   if(!validEmail(email))return response({error:"Enter a valid email address."},400,request,env);
   const accountId=String(p.account_id||"").trim();
-  const user=accountId
-    ? await env.DB.prepare("SELECT id,email,full_name,email_verified,email_verification_sent_at FROM users WHERE id=? AND email=? LIMIT 1").bind(accountId,email).first()
-    : await env.DB.prepare("SELECT id,email,full_name,email_verified,email_verification_sent_at FROM users WHERE email=? ORDER BY created_at DESC LIMIT 1").bind(email).first();
-  if(!user)return response({error:"No matching account was found for that email address."},404,request,env);
+  let user=null;
+  if(accountId){
+    user=await env.DB.prepare("SELECT id,email,full_name,email_verified,email_verification_sent_at FROM users WHERE id=? AND email=? LIMIT 1").bind(accountId,email).first();
+  }
+  // If a stale account id was left in the browser after a deployment/migration,
+  // fall back to the newest unverified account using this email.
+  if(!user){
+    user=await env.DB.prepare("SELECT id,email,full_name,email_verified,email_verification_sent_at FROM users WHERE email=? AND email_verified=0 ORDER BY created_at DESC LIMIT 1").bind(email).first();
+  }
+  // If there is no unverified account, fetch the newest matching account so
+  // an already-verified response can still be returned accurately.
+  if(!user){
+    user=await env.DB.prepare("SELECT id,email,full_name,email_verified,email_verification_sent_at FROM users WHERE email=? ORDER BY created_at DESC LIMIT 1").bind(email).first();
+  }
+  if(!user)return response({error:"No matching account was found for that email address. Start signup again with this email if the account was not created."},404,request,env);
   if(Number(user.email_verified)===1)return response({error:"This account is already verified. No verification email was sent.",email_verified:true,email_sent:false},409,request,env);
 
   const sentAt=Date.parse(String(user.email_verification_sent_at||""));
