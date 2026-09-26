@@ -84,8 +84,8 @@ async function ensureSchema(env){
     await env.DB.prepare("ALTER TABLE profiles ADD COLUMN avatar_data_url TEXT").run();
   }
   const userTable=await env.DB.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").first();
-  const userSql=String(userTable?.sql||"").toLowerCase().replace(/\\s+/g," ");
-  const emailIsUnique=/email\\s+text\\s+not\\s+null\\s+unique/.test(userSql)||/unique\\s*\\(\\s*email\\s*\\)/.test(userSql);
+  const userSql=String(userTable?.sql||"").toLowerCase().replace(/\s+/g," ");
+  const emailIsUnique=/email\s+text\s+not\s+null\s+unique/.test(userSql)||/unique\s*\(\s*email\s*\)/.test(userSql);
   if(emailIsUnique){
     await env.DB.batch([
       env.DB.prepare("PRAGMA defer_foreign_keys=ON"),
