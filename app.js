@@ -294,7 +294,8 @@ function initAuth(){
   const fullName=$("fullName"),dob=$("dateOfBirth"),email=$("email"),password=$("password"),ageCheck=$("ageCheck"),termsCheck=$("termsCheck");
   const signedIn=$("signedIn"),signedEmail=$("signedEmail"),signOut=$("signOut");
   const verificationState=$("verificationState"),verificationEmail=$("verificationEmail"),resendVerification=$("resendVerification"),backToAuth=$("backToAuth");
-  const state={mode:new URLSearchParams(location.search).get("mode")==="signin"?"signin":"signup",requestId:0};
+  const existingAccountState=$("existingAccountState"),existingAccountChoice=$("existingAccountChoice"),existingAccountPassword=$("existingAccountPassword"),continueExisting=$("continueExisting"),createAnother=$("createAnother"),existingConfirmationState=$("existingConfirmationState"),existingConfirmationEmail=$("existingConfirmationEmail");
+  const state={mode:new URLSearchParams(location.search).get("mode")==="signin"?"signin":"signup",requestId:0,allowDuplicateEmail:false,verificationAccountId:""};
   const maxDob=()=>{const d=new Date();d.setFullYear(d.getFullYear()-18);if(dob)dob.max=d.toISOString().slice(0,10)};
   const setMsg=(t,type="neutral")=>{if(msg){msg.textContent=t;msg.className="authMsg "+type}};
   const hide=(n,v=true)=>{if(n)n.hidden=v};
@@ -303,14 +304,23 @@ function initAuth(){
     if(tabsWrap)tabsWrap.style.display="grid";
     if(form)form.style.display="";
     if(signedIn)signedIn.style.display="none";
-    hide(form,false);hide(signedIn,true);hide(verificationState,true);
+    hide(form,false);hide(signedIn,true);hide(verificationState,true);hide(existingAccountState,true);hide(existingConfirmationState,true);
     const signup=state.mode==="signup";
     hide(nameField,!signup);hide(dobField,!signup);hide(ageAttest,!signup);hide(termsAttest,!signup);
     if(submit){submit.disabled=false;submit.textContent=signup?"CREATE ACCOUNT":"SIGN IN"}
     tabs.forEach(t=>t.classList.toggle("active",t.dataset.mode===state.mode));
   };
 
-  const showVerificationPending=(mail,message="Check your inbox to verify your email before continuing.")=>{
+  const showExistingAccount=(mail)=>{
+    if(tabsWrap)tabsWrap.style.display="none";
+    hide(form,true);hide(signedIn,true);hide(verificationState,true);hide(existingConfirmationState,true);hide(existingAccountState,false);
+    if(existingAccountChoice)existingAccountChoice.textContent="An account already uses "+mail+". Continue with that account or create another account using the same email?";
+    if(existingAccountPassword)existingAccountPassword.value="";
+    state.allowDuplicateEmail=false;
+    setMsg("This email is already in use. Choose how to continue.","neutral");
+  };
+
+    const showVerificationPending=(mail,message="Check your inbox to verify your email before continuing.")=>{
     if(tabsWrap)tabsWrap.style.display="none";
     if(form)form.style.display="none";
     if(signedIn)signedIn.style.display="none";
@@ -351,7 +361,7 @@ function initAuth(){
     resendVerification.disabled=true;
     resendVerification.textContent="SENDING…";
     try{
-      const data=await apiFetch("/auth/resend-verification",{method:"POST",body:JSON.stringify({email:mail})});
+      const data=await apiFetch("/auth/resend-verification",{method:"POST",body:JSON.stringify({email:mail,account_id:state.verificationAccountId||undefined})});
       const detail=data?.email_id
         ? "Resend accepted the email. ID: "+data.email_id+(data.email_from?" · From: "+data.email_from:"")
         : (data?.message||"A new verification email has been sent.");
@@ -378,7 +388,35 @@ function initAuth(){
     }
   });
 
-  signOut?.addEventListener("click",async()=>{
+  continueExisting?.addEventListener("click",async()=>{
+    const mail=String(email?.value||verificationEmail?.value||existingConfirmationEmail?.value||"").trim().toLowerCase();
+    const pass=String(existingAccountPassword?.value||"");
+    if(!mail||!pass){setMsg("Enter the previous account password.","warn");return}
+    continueExisting.disabled=true;continueExisting.textContent="SENDING…";
+    try{
+      const data=await apiFetch("/auth/request-account-confirmation",{method:"POST",body:JSON.stringify({email:mail,password:pass})});
+      if(existingAccountState)existingAccountState.hidden=true;
+      if(existingConfirmationState)existingConfirmationState.hidden=false;
+      if(existingConfirmationEmail)existingConfirmationEmail.value=mail;
+      setMsg(data?.email_id?"Confirmation email accepted by Resend. ID: "+data.email_id:"Confirmation email sent. Check your inbox.","good");
+      if(data?.email_id)state.verificationAccountId=data.account_id||"";
+    }catch(err){
+      setMsg(err.message||"Could not send the account confirmation email.","warn");
+    }finally{
+      continueExisting.disabled=false;continueExisting.textContent="SEND CONFIRMATION EMAIL";
+    }
+  });
+
+  createAnother?.addEventListener("click",()=>{
+    state.allowDuplicateEmail=true;
+    if(existingAccountState)existingAccountState.hidden=true;
+    if(tabsWrap)tabsWrap.style.display="grid";
+    hide(form,false);hide(existingConfirmationState,true);
+    setMsg("Create another account with this email, then verify it from the new email.","neutral");
+    submit?.focus();
+  });
+
+    signOut?.addEventListener("click",async()=>{
     signOut.disabled=true;
     try{await apiFetch("/auth/signout",{method:"POST"})}catch{}
     clearSessionToken();window.__REPLYFLIX_ACCESS=null;signOut.disabled=false;state.mode="signin";
@@ -401,11 +439,13 @@ function initAuth(){
     try{
       const data=await apiFetch(state.mode==="signup"?"/auth/signup":"/auth/signin",{method:"POST",body:JSON.stringify(state.mode==="signup"?{
         email:mail,password:pass,full_name:fullName.value.trim(),date_of_birth:dob.value,
-        age_attested:true,terms_accepted_at:new Date().toISOString(),terms_version:"2026-09-23"
+        age_attested:true,terms_accepted_at:new Date().toISOString(),terms_version:"2026-09-23",allow_duplicate_email:state.allowDuplicateEmail
       }:{email:mail,password:pass})});
 
       if(data?.verification_required){
         if(requestId===state.requestId){
+          state.verificationAccountId=data.account_id||"";
+          state.allowDuplicateEmail=false;
           const sent=data.email_sent!==false;
           showVerificationPending(
             data.email||mail,
@@ -438,6 +478,10 @@ function initAuth(){
     }catch(err){
       submit.disabled=false;
       if(requestId!==state.requestId)return;
+      if(err.data?.duplicate_email){
+        if(requestId===state.requestId)showExistingAccount(err.data.email||mail);
+        return;
+      }
       if(err.data?.verification_required){
         const sent=err.data.email_sent!==false;
         showVerificationPending(
@@ -459,8 +503,29 @@ function initAuth(){
   });
 
   const verifyToken=String(new URLSearchParams(location.search).get("verify")||"").trim();
+  const confirmAccountToken=String(new URLSearchParams(location.search).get("confirm_account")||"").trim();
   (async()=>{
     maxDob();
+
+    if(confirmAccountToken){
+      if(tabsWrap)tabsWrap.style.display="none";
+      hide(form,true);hide(signedIn,true);hide(existingAccountState,true);
+      if(existingConfirmationState)existingConfirmationState.style.display="grid";
+      if(backToAuth)backToAuth.hidden=true;
+      setMsg("Confirming your existing account…","neutral");
+      try{
+        const data=await apiFetch("/auth/confirm-account",{method:"POST",body:JSON.stringify({token:confirmAccountToken})});
+        if(data?.session_token)try{sessionStorage.setItem("replyflix_session",data.session_token)}catch{}
+        window.__REPLYFLIX_ACCESS={user:data.user,profile:data.profile};
+        history.replaceState(null,"","auth.html?mode=signin");
+        showSigned(data.user);
+        window.dispatchEvent(new CustomEvent("replyflix:auth-changed",{detail:{authenticated:true}}));
+      }catch(err){
+        showVerificationPending("",err.message||"This account confirmation link is invalid or has expired.");
+        setMsg(err.message||"This account confirmation link is invalid or has expired.","warn");
+      }
+      return;
+    }
 
     if(verifyToken){
       if(tabsWrap)tabsWrap.style.display="none";
