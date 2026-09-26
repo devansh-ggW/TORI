@@ -34,7 +34,7 @@
   });
   const loadImageSrc=src=>new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(new Error("Could not load profile image."));img.src=src});
   const canvasToWebp=()=>new Promise((resolve,reject)=>{
-    const out=document.createElement("canvas"),size=256;out.width=size;out.height=size;const c=out.getContext("2d");
+    const out=document.createElement("canvas"),size=192;out.width=size;out.height=size;const c=out.getContext("2d");
     c.fillStyle="#ffffff";c.fillRect(0,0,size,size);
     if(!state.image)return resolve("");
     const scale=Math.max(size/state.image.width,size/state.image.height)*state.zoom;
@@ -43,7 +43,7 @@
     out.toBlob(blob=>{
       if(!blob){reject(new Error("Could not prepare the image."));return}
       const rd=new FileReader();rd.onload=()=>resolve(String(rd.result));rd.onerror=()=>reject(new Error("Could not encode the image."));rd.readAsDataURL(blob)
-    },"image/webp",.84);
+    },"image/webp",.68);
   });
   const loadProfile=async()=>{
     const api=accessApi();if(!api){location.href="auth.html?mode=signin";return}
@@ -93,12 +93,13 @@
     const btn=$("saveChanges");btn.disabled=true;btn.textContent="SAVING…";
     try{
       const avatar=await canvasToWebp();
+      if(avatar.length>330000)throw new Error("That image is still too large after compression. Please choose a simpler or smaller image.");
       const name=$("profileName").value.trim();
       if(!name){setMessage("Display name is required.","warn");btn.disabled=false;return}
       const data=await api("/profile",{method:"PUT",body:JSON.stringify({full_name:name,avatar_data_url:avatar||null})});
       state.profile=data.profile;state.user.full_name=name;state.originalImage=avatar||null;
       setDirty(false);setMessage("Changes saved successfully.","good");
-    }catch(err){btn.disabled=false;setMessage(err.message||"Could not save changes.","warn");setDirty(true)}
+    }catch(err){btn.disabled=false;setMessage(err?.message||"Could not save changes. Check your connection and try again.","warn");setDirty(true)}
   });
   window.addEventListener("beforeunload",e=>{if(state.dirty){e.preventDefault();e.returnValue=""}});
   loadProfile();
