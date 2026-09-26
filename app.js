@@ -308,6 +308,7 @@ function initAuth(){
     if(avatarImg){
       avatarImg.src=window.__REPLYFLIX_ACCESS?.profile?.avatar_data_url||"";
       avatarImg.hidden=!avatarImg.src;
+      avatar?.classList.toggle("hasImage",!!avatarImg.src);
     }
     setMsg("Signed in successfully.","good")
   };
