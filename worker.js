@@ -70,34 +70,70 @@ async function ensureSchema(env){
 }
 
 async function signup(request,env){
-  const p=await jsonBody(request);
-  const email=String(p.email||"").trim().toLowerCase();
-  const password=String(p.password||"");
-  const fullName=String(p.full_name||"").trim();
-  const dob=String(p.date_of_birth||"");
-  if(!validEmail(email)||email.length>254)return response({error:"Enter a valid email address."},400,request,env);
-  if(password.length<10)return response({error:"Password must be at least 10 characters."},400,request,env);
-  if(!fullName||fullName.length>120)return response({error:"Enter your full name."},400,request,env);
-  if(age(dob)<18)return response({error:"ReplyFlix requires users to be 18 or older."},400,request,env);
-  if(p.age_attested!==true||p.terms_accepted_at==null)return response({error:"Confirm your age and accept the policies."},400,request,env);
-  if(await env.DB.prepare("SELECT id FROM users WHERE email=? LIMIT 1").bind(email).first())return response({error:"An account with this email already exists. Sign in instead."},409,request,env);
-  const id=uid(),t=now(),hp=await hashPassword(password);
-  await env.DB.batch([
-    env.DB.prepare("INSERT INTO users(id,email,password_hash,password_salt,full_name,date_of_birth,age_verified,terms_accepted_at,terms_version,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)").bind(id,email,hp.hash,hp.salt,fullName,dob,1,String(p.terms_accepted_at),String(p.terms_version||"2026-09-23"),t,t),
-    env.DB.prepare("INSERT INTO profiles(user_id,plan,auto_reply_enabled,knowledge_json,integrations_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?)").bind(id,"free",0,"{}","{}",t,t)
-  ]);
-  const token=await newSession(env,id);
-  const a=await access(new Request(request.url,{headers:new Headers({"Authorization":"Bearer "+token})}),env);
-  return response({user:a.user,profile:a.profile,session_token:token},201,request,env,{"set-cookie":sessionCookie(token)});
+  let stage="schema";
+  try{
+    await ensureSchema(env);
+    stage="parse";
+    const p=await jsonBody(request);
+    const email=String(p.email||"").trim().toLowerCase();
+    const password=String(p.password||"");
+    const fullName=String(p.full_name||"").trim();
+    const dob=String(p.date_of_birth||"");
+    if(!validEmail(email)||email.length>254)return response({error:"Enter a valid email address."},400,request,env);
+    if(password.length<10)return response({error:"Password must be at least 10 characters."},400,request,env);
+    if(!fullName||fullName.length>120)return response({error:"Enter your full name."},400,request,env);
+    if(age(dob)<18)return response({error:"ReplyFlix requires users to be 18 or older."},400,request,env);
+    if(p.age_attested!==true||p.terms_accepted_at==null)return response({error:"Confirm your age and accept the policies."},400,request,env);
+
+    stage="check-existing";
+    if(await env.DB.prepare("SELECT id FROM users WHERE email=? LIMIT 1").bind(email).first())return response({error:"An account with this email already exists. Sign in instead."},409,request,env);
+
+    stage="hash-password";
+    const id=uid(),t=now(),hp=await hashPassword(password);
+
+    stage="create-account";
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO users(id,email,password_hash,password_salt,full_name,date_of_birth,age_verified,terms_accepted_at,terms_version,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)").bind(id,email,hp.hash,hp.salt,fullName,dob,1,String(p.terms_accepted_at),String(p.terms_version||"2026-09-23"),t,t),
+      env.DB.prepare("INSERT INTO profiles(user_id,plan,auto_reply_enabled,knowledge_json,integrations_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?)").bind(id,"free",0,"{}","{}",t,t)
+    ]);
+
+    stage="create-session";
+    const token=await newSession(env,id);
+
+    stage="load-session";
+    const a=await access(new Request(request.url,{headers:new Headers({"Authorization":"Bearer "+token})}),env);
+    if(!a)throw new Error("New session could not be loaded.");
+
+    return response({user:a.user,profile:a.profile,session_token:token},201,request,env,{"set-cookie":sessionCookie(token)});
+  }catch(err){
+    console.error("signup stage:",stage,err);
+    return response({error:"Signup failed.",stage},500,request,env);
+  }
 }
 async function signin(request,env){
-  const p=await jsonBody(request),email=String(p.email||"").trim().toLowerCase(),password=String(p.password||"");
-  if(!validEmail(email)||!password)return response({error:"Email and password are required."},400,request,env);
-  const u=await env.DB.prepare("SELECT * FROM users WHERE email=? LIMIT 1").bind(email).first();
-  if(!u||!(await verifyPassword(password,u.password_salt,u.password_hash)))return response({error:"Invalid email or password."},401,request,env);
-  const token=await newSession(env,u.id);
-  const a=await access(new Request(request.url,{headers:new Headers({"Authorization":"Bearer "+token})}),env);
-  return response({user:a.user,profile:a.profile,session_token:token},200,request,env,{"set-cookie":sessionCookie(token)});
+  let stage="schema";
+  try{
+    await ensureSchema(env);
+    stage="parse";
+    const p=await jsonBody(request),email=String(p.email||"").trim().toLowerCase(),password=String(p.password||"");
+    if(!validEmail(email)||!password)return response({error:"Email and password are required."},400,request,env);
+
+    stage="lookup-user";
+    const u=await env.DB.prepare("SELECT * FROM users WHERE email=? LIMIT 1").bind(email).first();
+    stage="verify-password";
+    if(!u||!(await verifyPassword(password,u.password_salt,u.password_hash)))return response({error:"Invalid email or password."},401,request,env);
+
+    stage="create-session";
+    const token=await newSession(env,u.id);
+    stage="load-session";
+    const a=await access(new Request(request.url,{headers:new Headers({"Authorization":"Bearer "+token})}),env);
+    if(!a)throw new Error("New session could not be loaded.");
+
+    return response({user:a.user,profile:a.profile,session_token:token},200,request,env,{"set-cookie":sessionCookie(token)});
+  }catch(err){
+    console.error("signin stage:",stage,err);
+    return response({error:"Signin failed.",stage},500,request,env);
+  }
 }
 async function signout(request,env){
   const auth=request.headers.get("Authorization")||"",bearer=auth.startsWith("Bearer ")?auth.slice(7):"",token=bearer||parseCookies(request)[COOKIE_NAME];
