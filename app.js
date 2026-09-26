@@ -304,7 +304,7 @@ function initAuth(){
   form.addEventListener("submit",async e=>{
     e.preventDefault();const mail=email?.value.trim().toLowerCase()||"",pass=password?.value||"";
     if(!mail||!pass){setMsg("Email and password are required.","warn");return}
-    if(pass.length<10){setMsg("Password must be at least 10 characters.","warn");return}
+    if(pass.length<8){setMsg("Password must be at least 8 characters.","warn");return}
     if(state.mode==="signup"){
       if(!fullName?.value.trim()){setMsg("Enter your full name.","warn");fullName?.focus();return}
       if(!isAdultDate(dob?.value)){setMsg("ReplyFlix requires users to be 18 or older.","warn");return}
