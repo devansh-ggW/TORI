@@ -51,7 +51,7 @@ let K=load();
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 let cloudSaveTimer=null;
-const REPLYFLIX_API_BASE=String(window.REPLYFLIX_CONFIG?.apiBase||'https://api.replyflix.dewify.shop/api').replace(/\/$/,'');
+const REPLYFLIX_API_BASE=String(window.REPLYFLIX_CONFIG?.apiBase||'https://replyflix.uchiha9igh8mare.workers.dev/api').replace(/\/$/,'');
 function sessionToken(){try{return sessionStorage.getItem('replyflix_session')||''}catch{return''}}
 function clearSessionToken(){try{sessionStorage.removeItem('replyflix_session')}catch{}}
 async function apiFetch(path,options={}){
