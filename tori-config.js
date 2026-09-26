@@ -1,1 +1,0 @@
-// Legacy filename. ReplyFlix loads replyflix-config.js.
