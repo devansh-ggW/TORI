@@ -288,7 +288,7 @@ async function ensureReplyFlixAccess(redirect=true){
 }
 function initAuth(){
   const form=$("authForm");if(!form)return;
-  const msg=$("authMsg"),submit=$("authSubmit"),tabs=[...document.querySelectorAll(".authTab")];
+  const msg=$("authMsg"),submit=$("authSubmit"),tabs=[...document.querySelectorAll(".authTab")],tabsWrap=document.querySelector(".authTabs");
   const nameField=$("nameField"),dobField=$("dobField"),ageAttest=$("ageAttest"),termsAttest=$("termsAttest");
   const fullName=$("fullName"),dob=$("dateOfBirth"),email=$("email"),password=$("password"),ageCheck=$("ageCheck"),termsCheck=$("termsCheck");
   const signedIn=$("signedIn"),signedEmail=$("signedEmail"),signOut=$("signOut");
@@ -296,8 +296,9 @@ function initAuth(){
   const maxDob=()=>{const d=new Date();d.setFullYear(d.getFullYear()-18);if(dob)dob.max=d.toISOString().slice(0,10)};maxDob();
   const setMsg=(t,type="neutral")=>{if(msg){msg.textContent=t;msg.className="authMsg "+type}};
   const hide=(n,v=true)=>{if(n)n.hidden=v};
-  const showForm=()=>{if(form)form.style.display="";if(signedIn)signedIn.style.display="none";hide(form,false);hide(signedIn,true);const signup=state.mode==="signup";hide(nameField,!signup);hide(dobField,!signup);hide(ageAttest,!signup);hide(termsAttest,!signup);if(submit){submit.disabled=false;submit.textContent=signup?"CREATE ACCOUNT":"SIGN IN"}tabs.forEach(t=>t.classList.toggle("active",t.dataset.mode===state.mode))};
+  const showForm=()=>{if(tabsWrap)tabsWrap.style.display="grid";if(form)form.style.display="";if(signedIn)signedIn.style.display="none";hide(form,false);hide(signedIn,true);const signup=state.mode==="signup";hide(nameField,!signup);hide(dobField,!signup);hide(ageAttest,!signup);hide(termsAttest,!signup);if(submit){submit.disabled=false;submit.textContent=signup?"CREATE ACCOUNT":"SIGN IN"}tabs.forEach(t=>t.classList.toggle("active",t.dataset.mode===state.mode))};
   const showSigned=user=>{
+    if(tabsWrap)tabsWrap.style.display="none";
     if(form)form.style.display="none";
     if(signedIn)signedIn.style.display="grid";
     hide(form,true);hide(signedIn,false);
