@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#f3f0e8">
 <meta name="description" content="ReplyFlix profile settings">
-<link rel="stylesheet" href="styles.css?v=28">
+<link rel="stylesheet" href="styles.css?v=29">
 <link rel="stylesheet" href="replyflix-theme.css?v=2">
 <link rel="icon" type="image/png" href="replyflix-icon.svg">
 <script src="replyflix-config.js?v=1"></script>
@@ -20,7 +20,7 @@
 <section class="profileHero">
 <div class="wrap">
 <div class="kickerLine"><i></i><span class="kicker">REPLYFLIX / PROFILE</span></div>
-<div class="profileHead"><div><h1>YOUR PROFILE.</h1><p class="lede">Adjust your profile picture, edit your display name, then save all changes together.</p></div><div id="profileState" class="profileState">LOADING</div></div>
+<div class="profileHead"><div><h1>PROFILE &amp; SETTINGS.</h1><p class="lede">Adjust your profile picture, edit your display name, then save all changes together.</p></div><div id="profileState" class="profileState">LOADING</div></div>
 </div>
 </section>
 <section class="profileSection">
@@ -47,6 +47,11 @@
 </div>
 </div>
 
+<div class="dangerZone panel">
+<div class="panelTop"><div><span class="eyebrow">ACCOUNT</span><h2>DANGER ZONE</h2></div><span class="dirtyBadge">PERMANENT</span></div>
+<p class="dangerCopy">Deleting your account permanently removes your ReplyFlix profile, saved knowledge, messages, sessions, and profile picture from the ReplyFlix database. This cannot be undone.</p>
+<button class="btn dangerButton" id="deleteAccount" type="button">DELETE ACCOUNT</button>
+</div>
 <div class="saveBar">
 <div><strong id="saveTitle">NO UNSAVED CHANGES</strong><span id="saveHint">Upload or adjust the image, or change your display name.</span></div>
 <button class="btn" id="saveChanges" type="button" disabled>SAVE CHANGES</button>
@@ -55,6 +60,6 @@
 </main>
 <footer class="siteFooter"><div class="wrap foot"><div>© 2026 ReplyFlix. All rights reserved.</div><div class="footLinks"><a href="privacy.html">Privacy Policy</a><a href="terms.html">Terms &amp; Conditions</a><a href="disclaimer.html">Disclaimer</a><a href="cookie-policy.html">Cookie Policy</a><a href="acceptable-use.html">Acceptable Use</a></div></div></footer>
 <div class="toast" id="toast"></div>
-<script src="app.js?v=28"></script>
-<script src="profile.js?v=1"></script>
+<script src="app.js?v=30"></script>
+<script src="profile.js?v=2"></script>
 </body></html>
