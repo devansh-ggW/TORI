@@ -669,7 +669,7 @@ function renderSiteAuth(access){
   if(user){
     const link=document.createElement("a");
     link.className="profileMini";
-    link.href="profile.html";
+    link.href="https://ai.replyflix.dewify.shop/profile.html";
     link.title="Open profile";
     const pic=document.createElement("span");
     pic.className="profileMiniImage";
@@ -695,11 +695,11 @@ function renderSiteAuth(access){
   }
   const signIn=document.createElement("a");
   signIn.className="btn dark";
-  signIn.href="auth.html?mode=signin";
+  signIn.href="https://ai.replyflix.dewify.shop/auth.html?mode=signin";
   signIn.textContent="SIGN IN";
   const signUp=document.createElement("a");
   signUp.className="btn";
-  signUp.href="auth.html?mode=signup";
+  signUp.href="https://ai.replyflix.dewify.shop/auth.html?mode=signup";
   signUp.textContent="SIGN UP";
   auth.append(signIn,signUp);
 }
