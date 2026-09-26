@@ -313,7 +313,7 @@ function initAuth(){
   };
   const setMode=mode=>{state.mode=mode==="signin"?"signin":"signup";history.replaceState(null,"","auth.html?mode="+state.mode);showForm();setMsg(state.mode==="signin"?"Sign in with your account.":"Create your ReplyFlix account. You must be 18 or older.","neutral")};
   tabs.forEach(t=>t.addEventListener("click",()=>setMode(t.dataset.mode)));
-  signOut?.addEventListener("click",async()=>{signOut.disabled=true;try{await apiFetch('/auth/signout',{method:'POST'})}catch{}clearSessionToken();window.__REPLYFLIX_ACCESS=null;signOut.disabled=false;state.mode="signin";history.replaceState(null,"","auth.html?mode=signin");showForm();setMsg("Signed out.","good")});
+  signOut?.addEventListener("click",async()=>{signOut.disabled=true;try{await apiFetch('/auth/signout',{method:'POST'})}catch{}clearSessionToken();window.__REPLYFLIX_ACCESS=null;signOut.disabled=false;state.mode="signin";window.dispatchEvent(new CustomEvent("replyflix:auth-changed",{detail:{authenticated:false}}));history.replaceState(null,"","auth.html?mode=signin");showForm();setMsg("Signed out.","good")});
   form.addEventListener("submit",async e=>{
     e.preventDefault();const mail=email?.value.trim().toLowerCase()||"",pass=password?.value||"";
     if(!mail||!pass){setMsg("Email and password are required.","warn");return}
@@ -333,7 +333,7 @@ function initAuth(){
       if(data?.session_token)try{sessionStorage.setItem('replyflix_session',data.session_token)}catch{}
       window.__REPLYFLIX_ACCESS={user:data.user,profile:data.profile};
       submit.disabled=false;
-      if(requestId===state.requestId)showSigned(data.user);
+      if(requestId===state.requestId){showSigned(data.user);window.dispatchEvent(new CustomEvent("replyflix:auth-changed",{detail:{authenticated:true}}));}
     }catch(err){
       submit.disabled=false;
       if(requestId===state.requestId){showForm();setMsg(err.message||"Authentication failed.","warn");}
@@ -430,6 +430,35 @@ async function initMessages(){
   await load();await maybeAutoReply();await load();
 }
 
+
+function initSiteAuthControls(){
+  const actions=document.querySelector(".actions");if(!actions)return;
+  const menu=document.querySelector("#menu");
+  let box=actions.querySelector("[data-auth-actions]");
+  if(!box){
+    box=document.createElement("div");
+    box.className="authActions";
+    box.setAttribute("data-auth-actions","");
+    const old=[...actions.querySelectorAll('a[href^="auth.html"]')];
+    old.forEach(x=>x.remove());
+    const accountLink=actions.querySelector('a[href="auth.html"]');
+    if(accountLink)accountLink.remove();
+    if(menu)actions.insertBefore(box,menu);else actions.appendChild(box);
+  }
+  const render=authenticated=>{
+    box.innerHTML=authenticated
+      ? '<a class="btn dark" href="profile.html">PROFILE</a>'
+      : '<a class="btn dark" href="auth.html?mode=signin">SIGN IN</a><a class="btn" href="auth.html?mode=signup">SIGN UP</a>';
+  };
+  render(!!window.__REPLYFLIX_ACCESS?.user);
+  const sync=async()=>{
+    try{const data=await apiFetch("/auth/me");window.__REPLYFLIX_ACCESS={user:data.user,profile:data.profile};render(true)}
+    catch{render(false)}
+  };
+  sync();
+  window.addEventListener("replyflix:auth-changed",e=>render(!!e.detail?.authenticated));
+}
+
 function init(){
   document.querySelectorAll('[data-page]').forEach(a=>{if(a.getAttribute('href')===location.pathname.split('/').pop()||((!location.pathname.split('/').pop()||location.pathname.endsWith('/'))&&a.getAttribute('href')==='index.html'))a.classList.add('active')});
   $('menu')?.addEventListener('click',()=>{const m=$('menu'),n=$('navlinks'),open=n.classList.toggle('open');m.setAttribute('aria-expanded',String(open));});
@@ -443,7 +472,7 @@ function init(){
   if($('exportPack'))$('exportPack').onclick=()=>{readProfile();const blob=new Blob([JSON.stringify(K,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='replyflix-knowledge.json';a.click();URL.revokeObjectURL(a.href);toast('Knowledge pack exported.')};
   if($('importFile'))$('importFile').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const x=JSON.parse(rd.result);if(!x.business||typeof x.business!=='object')throw new Error('Invalid');K=normalizePack(x);save();render();toast('Knowledge pack imported.')}catch{toast('Invalid ReplyFlix knowledge file.')}};rd.readAsText(f)};
   render();if($('incoming'))resetResult();
-  initTheme();initAuth();initProtectedPage();initMessages();
+  initTheme();initSiteAuthControls();initAuth();initProtectedPage();initMessages();
 }
 window.ReplyFlix={analyze,load:()=>K,save,normalize,INTENTS,apiFetch,reset:()=>{K=blank();save();return K}};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
