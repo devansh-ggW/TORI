@@ -12,3 +12,24 @@
 [data-theme="dark"] .lede,[data-theme="dark"] .heroPanel p,[data-theme="dark"] .card p,[data-theme="dark"] .block p,[data-theme="dark"] .legalDoc p,[data-theme="dark"] .smallNote,[data-theme="dark"] .helper{color:#c4c4c0!important}
 [data-theme="dark"] .themeToggle{background:#111113!important;color:#f2f2f0!important;border-color:#38383b!important}
 [data-theme="dark"] .themeToggle:hover{background:#1a1a1c!important}
+
+.themeTransitionOverlay{position:fixed;inset:0;z-index:99999;pointer-events:none;opacity:0;overflow:hidden;--theme-x:50vw;--theme-y:50vh}
+.themeTransitionOverlay.run{opacity:1}
+.themeTransitionOverlay:before{content:"";position:absolute;inset:-25%;background:radial-gradient(circle at var(--theme-x) var(--theme-y),rgba(255,255,255,.98) 0 8%,rgba(104,105,255,.18) 15%,rgba(5,5,8,.98) 33%,#000 70%);transform:scale(.15);opacity:0}
+.themeTransitionOverlay.run:before{animation:themeArmorCover .72s cubic-bezier(.18,.82,.18,1) both}
+.themeShockwave{position:absolute;left:var(--theme-x);top:var(--theme-y);width:34px;height:34px;transform:translate(-50%,-50%) scale(.2);border:1px solid rgba(151,160,255,.9);border-radius:50%;box-shadow:0 0 0 1px rgba(255,255,255,.16),0 0 40px rgba(108,117,255,.65),0 0 90px rgba(108,117,255,.22)}
+.themeTransitionOverlay.run .themeShockwave{animation:themeShock .7s cubic-bezier(.2,.9,.2,1) both}
+.themeArmorGrid{position:absolute;inset:-15%;background:linear-gradient(125deg,transparent 42%,rgba(255,255,255,.16) 46%,transparent 49%,transparent 57%,rgba(112,123,255,.16) 60%,transparent 63%),repeating-linear-gradient(115deg,transparent 0 42px,rgba(255,255,255,.035) 43px 44px);transform:translateX(-40%) skewX(-12deg);mix-blend-mode:screen;opacity:0}
+.themeTransitionOverlay.run .themeArmorGrid{animation:themeGrid .72s cubic-bezier(.22,.78,.2,1) both}
+.themeClawSweep{position:absolute;inset:-30%;background:repeating-linear-gradient(111deg,transparent 0 100px,rgba(255,255,255,.12) 104px 110px,transparent 116px 182px);transform:translateX(-55%) rotate(-8deg);filter:blur(2px);opacity:0}
+.themeTransitionOverlay.run .themeClawSweep{animation:themeClaws .62s cubic-bezier(.2,.85,.2,1) both}
+.themeCoreGlow{position:absolute;left:var(--theme-x);top:var(--theme-y);width:80px;height:80px;transform:translate(-50%,-50%) scale(.3);border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.95),rgba(119,130,255,.35) 30%,transparent 72%);filter:blur(1px);opacity:0}
+.themeTransitionOverlay.run .themeCoreGlow{animation:themeCore .46s ease-out both}
+.themeTransitionOverlay.to-light:before{filter:invert(1);opacity:.96}
+.themeTransitionOverlay.to-light .themeArmorGrid,.themeTransitionOverlay.to-light .themeClawSweep{filter:invert(1)}
+@keyframes themeArmorCover{0%{transform:scale(.12);opacity:0}14%{opacity:1}38%{transform:scale(1.1);opacity:1}64%{transform:scale(1.85);opacity:1}100%{transform:scale(2.3);opacity:0}}
+@keyframes themeShock{0%{transform:translate(-50%,-50%) scale(.2);opacity:0}14%{opacity:1}55%{transform:translate(-50%,-50%) scale(14);opacity:.42}100%{transform:translate(-50%,-50%) scale(24);opacity:0}}
+@keyframes themeGrid{0%{transform:translateX(-45%) skewX(-12deg);opacity:0}20%{opacity:.75}62%{transform:translateX(10%) skewX(-12deg);opacity:.55}100%{transform:translateX(55%) skewX(-12deg);opacity:0}}
+@keyframes themeClaws{0%{transform:translateX(-58%) rotate(-8deg);opacity:0}18%{opacity:.9}70%{transform:translateX(18%) rotate(-8deg);opacity:.38}100%{transform:translateX(48%) rotate(-8deg);opacity:0}}
+@keyframes themeCore{0%{transform:translate(-50%,-50%) scale(.25);opacity:0}20%{opacity:1}60%{transform:translate(-50%,-50%) scale(5);opacity:.35}100%{transform:translate(-50%,-50%) scale(8);opacity:0}}
+@media(prefers-reduced-motion:reduce){.themeTransitionOverlay{display:none!important}.themeToggle{transition:none!important}}
