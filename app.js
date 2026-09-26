@@ -1,6 +1,6 @@
-const STORE='tori-knowledge-v4';
-const TORI_SITE_URL='https://tori.dewify.shop';
-const THEME_KEY='tori-theme';
+const STORE='replyflix-knowledge-v1';
+const REPLYFLIX_SITE_URL='https://tori.dewify.shop';
+const THEME_KEY='replyflix-theme';
 
 const INTENTS={
 BUSINESS_NAME:{label:'BUSINESS NAME',patterns:['what is your business name','what is ur business name','whats your business name','whats ur business name','what is the business name','whats the business name','business name','company name','name of your business','what is the company called','what do you call your business','what is your brand name','your brand name']},
@@ -51,20 +51,32 @@ let K=load();
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 let cloudSaveTimer=null;
+const REPLYFLIX_API_BASE=String(window.REPLYFLIX_CONFIG?.apiBase||'/api').replace(/\\/$/,'');
+function sessionToken(){try{return sessionStorage.getItem('replyflix_session')||''}catch{return''}}
+function clearSessionToken(){try{sessionStorage.removeItem('replyflix_session')}catch{}}
+async function apiFetch(path,options={}){
+  const headers=new Headers(options.headers||{});
+  if(options.body&&!(options.body instanceof FormData)&&!headers.has('content-type'))headers.set('content-type','application/json');
+  const token=sessionToken();
+  if(token&&!headers.has('authorization'))headers.set('authorization','Bearer '+token);
+  const res=await fetch(REPLYFLIX_API_BASE+path,{...options,headers,credentials:'include'});
+  let data=null;try{data=await res.json()}catch{}
+  if(!res.ok){const err=new Error(data?.error||('Request failed ('+res.status+')'));err.status=res.status;throw err}
+  return data;
+}
 function save(){
   localStorage.setItem(STORE,JSON.stringify(K));
-  const access=window.__TORI_ACCESS;
-  if(!access?.client||!access?.user)return;
+  const access=window.__REPLYFLIX_ACCESS;
+  if(!access?.user)return;
   clearTimeout(cloudSaveTimer);
   cloudSaveTimer=setTimeout(async()=>{
     try{
-      const {error}=await access.client.from("profiles").update({
+      await apiFetch('/profile',{method:'PUT',body:JSON.stringify({
         business_name:K.business?.name||null,
         knowledge:K,
         updated_at:new Date().toISOString()
-      }).eq("id",access.user.id);
-      if(error)console.warn("TORI cloud knowledge sync:",error.message);
-    }catch(e){console.warn("TORI cloud knowledge sync failed:",e)}
+      })});
+    }catch(e){console.warn('ReplyFlix cloud knowledge sync failed:',e)}
   },350);
 }
 function clean(s){return String(s??'').toLowerCase().replace(/[“”"'`]/g,' ').replace(/[^a-z0-9₹$€£+\-/#.\s]/g,' ').replace(/\s+/g,' ').trim()}
@@ -226,7 +238,7 @@ if(!entity&&required){if(configuredEntities.length===1)entity={...configuredEnti
 const ambiguous=Boolean(entity?.ambiguous);let answers=[],missing=[],factHits=[],used=[];
 for(const r of selected){let e=entity;if(r.entityName&&!e)e=entities().find(x=>normalize(x.name)===normalize(r.entityName))||e;let f=factFor(r.key,e,r.customFact);if(f){answers.push(r.key==='CUSTOM_FACT'?`${r.customFact.key}: ${f}`:sentence(r.label,f,e));factHits.push(`${r.label} → ${f}`);used.push(r.label)}else if(r.needsEntity&&!e){missing.push(`${r.label.toLowerCase()} product/service`)}else if(r.key==='DISCOUNT'&&configuredEntities.length){missing.push('discount rule')}else missing.push(r.label.toLowerCase())}
 let confidence=16;const maxIntent=ic[0]?.score||0,topEntity=entity?.score||0;if(ic.length)confidence+=Math.min(46,maxIntent*2.6);if(topEntity)confidence+=Math.min(27,topEntity*27);if(!required&&selected.length)confidence+=15;const explicit=selected[0]?.evidence?.some(v=>!String(v).startsWith('near:'));if(!required&&explicit)confidence+=10;if(selected.length>1)confidence+=6;if(factHits.length)confidence+=Math.min(16,factHits.length*4.5);if(missing.length)confidence-=Math.min(32,missing.length*12);if(ambiguous)confidence-=30;if(words(original).length>=4)confidence+=4;if(/\b(maybe|perhaps|probably|not sure|i think)\b/.test(nt))confidence-=8;if(/\?/.test(original))confidence+=2;confidence=Math.max(8,Math.min(99,Math.round(confidence)));let status='neutral';if(confidence>=78&&!missing.length&&!ambiguous)status='good';else if(confidence>=48)status='warn';if(ambiguous&&status==='good')status='warn';
-let response='';if(answers.length)response=styleResponse(formalJoin(answers));if(missing.length){const m=uniq(missing).join(', ');response+=(response?' ':'')+`I can address the configured portion, but ${m} ${missing.length===1?'is':'are'} not configured yet.`}if(ambiguous)response=(response?response+' ':'')+'The message could refer to more than one configured product or service, so please review the intended item before responding.';if(!response)response='TORI could not establish a reliable business-specific answer from the configured knowledge.';let reason=status==='good'?'Strong intent match, entity resolution and fact coverage. The response is composed only from configured business knowledge.':status==='warn'?(ambiguous?'More than one entity is plausible, so TORI lowered confidence for review.':'The message has a plausible interpretation, but a fact, entity or context signal needs review.'):'The current message does not contain enough reliable context or configured facts for a business-specific answer.';return{original,normalized:nt,confidence,status,intents:selected,entity,evidence:uniq([...selected.flatMap(x=>x.evidence),...(entity?[entity.method+': '+entity.matched]:[])]),missing,used,factHits,response,reason};}
+let response='';if(answers.length)response=styleResponse(formalJoin(answers));if(missing.length){const m=uniq(missing).join(', ');response+=(response?' ':'')+`I can address the configured portion, but ${m} ${missing.length===1?'is':'are'} not configured yet.`}if(ambiguous)response=(response?response+' ':'')+'The message could refer to more than one configured product or service, so please review the intended item before responding.';if(!response)response='ReplyFlix could not establish a reliable business-specific answer from the configured knowledge.';let reason=status==='good'?'Strong intent match, entity resolution and fact coverage. The response is composed only from configured business knowledge.':status==='warn'?(ambiguous?'More than one entity is plausible, so ReplyFlix lowered confidence for review.':'The message has a plausible interpretation, but a fact, entity or context signal needs review.'):'The current message does not contain enough reliable context or configured facts for a business-specific answer.';return{original,normalized:nt,confidence,status,intents:selected,entity,evidence:uniq([...selected.flatMap(x=>x.evidence),...(entity?[entity.method+': '+entity.matched]:[])]),missing,used,factHits,response,reason};}
 function fieldsForProfile(){const map={bizName:'name',bizLegal:'legalName',bizCategory:'category',bizTagline:'tagline',bizDesc:'description',bizWebsite:'website',bizEmail:'email',bizPhone:'phone',bizWhatsapp:'whatsapp',bizCountry:'country',bizCity:'city',bizAddress:'address',bizHours:'hours',bizSupportHours:'supportHours',bizPayments:'payments',bizCurrencies:'currencies',bizDelivery:'delivery',bizLeadTime:'leadTime',bizRefund:'refund',bizReturns:'returns',bizSocial:'social',bizCta:'cta',bizStyle:'style'};return map}
 function renderProfile(){if(!$('bizName'))return;const b=K.business;for(const[id,key]of Object.entries(fieldsForProfile())){const el=$(id);if(el)el.value=b[key]||''}}
 function renderEntries(){
@@ -246,16 +258,11 @@ let lastAnalysis=null;
 function runAnalysis(){lastAnalysis=analyze($('incoming').value);showResult(lastAnalysis)}
 function teach(){if(!lastAnalysis||!lastAnalysis.original){toast('Analyze a message first.');return}const primary=lastAnalysis.intents[0];if(!primary){toast('No intent to teach.');return}const entity=lastAnalysis.entity?.name||'';K.learned.unshift({phrase:lastAnalysis.original,intent:primary.key,entity});K.learned=K.learned.slice(0,300);save();renderEntries();toast('Message taught as an explicit local rule.')}
 function setExample(t){$('incoming').value=t;runAnalysis()}
-function clearPack(){if(!confirm('Clear all TORI local knowledge in this browser?'))return;K=blank();save();render();$('incoming').value='';resetResult();toast('Local knowledge cleared.')}
-function resetResult(){$('confidence').textContent='—';$('status').textContent='WAITING';$('status').className='status neutral';$('intent').textContent='—';$('entity').textContent='—';$('evidence').textContent='—';$('missing').textContent='—';$('response').textContent='Add business knowledge and analyze a message.';$('explain').textContent='TORI will show the signals, facts and uncertainty used in its decision.';$('explain').className='explain neutral';$('intentStack').innerHTML='';$('evidenceStack').innerHTML=''}
+function clearPack(){if(!confirm('Clear all ReplyFlix local knowledge in this browser?'))return;K=blank();save();render();$('incoming').value='';resetResult();toast('Local knowledge cleared.')}
+function resetResult(){$('confidence').textContent='—';$('status').textContent='WAITING';$('status').className='status neutral';$('intent').textContent='—';$('entity').textContent='—';$('evidence').textContent='—';$('missing').textContent='—';$('response').textContent='Add business knowledge and analyze a message.';$('explain').textContent='ReplyFlix will show the signals, facts and uncertainty used in its decision.';$('explain').className='explain neutral';$('intentStack').innerHTML='';$('evidenceStack').innerHTML=''}
 function toast(t){const x=$('toast');x.textContent=t;x.classList.add('show');clearTimeout(window.__toast);window.__toast=setTimeout(()=>x.classList.remove('show'),2300)}
 
-function getSupabaseClient(){
-  if(!window.supabase||!window.TORI_SUPABASE)return null;
-  if(window.__TORI_SUPABASE_CLIENT)return window.__TORI_SUPABASE_CLIENT;
-  window.__TORI_SUPABASE_CLIENT=window.supabase.createClient(window.TORI_SUPABASE.url,window.TORI_SUPABASE.key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
-  return window.__TORI_SUPABASE_CLIENT;
-}
+async function getReplyFlixClient(){return {api:true}}
 function isAdultDate(value){
   if(!value)return false;
   const dob=new Date(value+"T00:00:00");if(Number.isNaN(dob.getTime()))return false;
@@ -263,50 +270,66 @@ function isAdultDate(value){
   const before=now.getMonth()<dob.getMonth()||(now.getMonth()===dob.getMonth()&&now.getDate()<dob.getDate());if(before)age--;
   return age>=18;
 }
-async function getToriProfile(client,user){
-  if(!client||!user)return null;
-  const {data}=await client.from("profiles").select("*").eq("id",user.id).maybeSingle();
-  return data||null;
+async function getReplyFlixProfile(){
+  try{const r=await apiFetch('/profile');return r?.profile||null}catch{return null}
 }
-async function ensureToriAccess(redirect=true){
-  const client=getSupabaseClient();if(!client)return null;
-  const {data}=await client.auth.getSession();if(!data?.session?.user){if(redirect)location.href="auth.html?mode=signin";return null}
-  const profile=await getToriProfile(client,data.session.user);
-  if(!profile?.age_verified){if(redirect)location.href="auth.html?mode=profile";return null}
-  return {client,user:data.session.user,profile};
+async function ensureReplyFlixAccess(redirect=true){
+  try{
+    const data=await apiFetch('/auth/me');
+    const access={user:data.user,profile:data.profile};
+    window.__REPLYFLIX_ACCESS=access;
+    return access;
+  }catch(e){
+    window.__REPLYFLIX_ACCESS=null;
+    if(redirect&&e.status===401)location.href='auth.html?mode=signin';
+    else if(redirect)toast(e.message||'ReplyFlix backend is unavailable.');
+    return null;
+  }
 }
-
 function initAuth(){
-  const form=$("authForm"),client=getSupabaseClient();if(!form||!client)return;
+  const form=$("authForm");if(!form)return;
   const msg=$("authMsg"),submit=$("authSubmit"),tabs=[...document.querySelectorAll(".authTab")];
   const nameField=$("nameField"),dobField=$("dobField"),ageAttest=$("ageAttest"),termsAttest=$("termsAttest");
   const fullName=$("fullName"),dob=$("dateOfBirth"),email=$("email"),password=$("password"),ageCheck=$("ageCheck"),termsCheck=$("termsCheck");
-  const forgot=$("forgotPassword"),pending=$("pendingConfirm"),pendingText=$("pendingText"),resend=$("resendConfirm");
-  const recoveryPanel=$("recoveryPanel"),newPassword=$("newPassword"),confirmPassword=$("confirmPassword"),updatePassword=$("updatePassword"),cancelRecovery=$("cancelRecovery");
   const signedIn=$("signedIn"),signedEmail=$("signedEmail"),signOut=$("signOut");
-  const state={mode:new URLSearchParams(location.search).get("mode")==="signin"?"signin":"signup",pendingEmail:"",recovery:false};
-  const maxDob=()=>{const d=new Date();d.setFullYear(d.getFullYear()-18);const iso=d.toISOString().slice(0,10);if(dob)dob.max=iso};maxDob();
+  const state={mode:new URLSearchParams(location.search).get("mode")==="signin"?"signin":"signup"};
+  const maxDob=()=>{const d=new Date();d.setFullYear(d.getFullYear()-18);if(dob)dob.max=d.toISOString().slice(0,10)};maxDob();
   const setMsg=(t,type="neutral")=>{if(msg){msg.textContent=t;msg.className="authMsg "+type}};
   const hide=(n,v=true)=>{if(n)n.hidden=v};
-  const showForm=()=>{hide(form,false);hide(signedIn,true);hide(pending,true);hide(recoveryPanel,!state.recovery);const signup=state.mode==="signup";hide(nameField,!signup);hide(dobField,!signup);hide(ageAttest,!signup);hide(termsAttest,!signup);hide(forgot,signup);if(password)password.autocomplete=signup?"new-password":"current-password";if(submit){submit.disabled=false;submit.textContent=signup?"CREATE ACCOUNT":"SIGN IN"}tabs.forEach(t=>t.classList.toggle("active",t.dataset.mode===state.mode))};
-  const signOutLocal=async()=>{try{await client.auth.signOut({scope:"local"})}catch(_){try{await client.auth.signOut()}catch(__){}}};
-  const showPending=mail=>{state.pendingEmail=mail||state.pendingEmail||email?.value.trim()||"";hide(form,true);hide(signedIn,true);hide(recoveryPanel,true);hide(pending,false);if(pendingText)pendingText.textContent=state.pendingEmail?"A verification link was sent to "+state.pendingEmail+". Confirm the address, then sign in.":"Check your inbox for the verification link.";setMsg("Email verification is required. You are not signed in.","warn")};
-  const showSigned=user=>{state.pendingEmail="";hide(form,true);hide(pending,true);hide(recoveryPanel,true);hide(signedIn,false);if(signedEmail)signedEmail.textContent=user?.email||"Authenticated account";setMsg("Signed in successfully.","good")};
-  const verified=user=>!!user&&(!!user.email_confirmed_at||!!user.confirmed_at);
-  const renderSession=async session=>{const user=session?.user;if(!user){showForm();setMsg(state.mode==="signin"?"Sign in with your verified account.":"Create your TORI account. You must be 18 or older.","neutral");return}if(!verified(user)&&state.mode!=="signup"){state.pendingEmail=user.email||"";await signOutLocal();showPending(state.pendingEmail);return}const p=await getToriProfile(client,user);if(!p?.age_verified){await signOutLocal();showForm();setMsg("This account is missing its required age verification profile.","warn");return}showSigned(user)};
-  const setMode=mode=>{state.mode=mode==="signin"?"signin":"signup";state.pendingEmail="";state.recovery=false;history.replaceState(null,"","auth.html?mode="+state.mode);showForm();setMsg(state.mode==="signin"?"Sign in with your verified email and password.":"Create your TORI account. You must be 18 or older.","neutral")};
+  const showForm=()=>{hide(form,false);hide(signedIn,true);const signup=state.mode==="signup";hide(nameField,!signup);hide(dobField,!signup);hide(ageAttest,!signup);hide(termsAttest,!signup);if(submit){submit.disabled=false;submit.textContent=signup?"CREATE ACCOUNT":"SIGN IN"}tabs.forEach(t=>t.classList.toggle("active",t.dataset.mode===state.mode))};
+  const showSigned=user=>{hide(form,true);hide(signedIn,false);if(signedEmail)signedEmail.textContent=user?.email||"Authenticated account";setMsg("Signed in successfully.","good")};
+  const setMode=mode=>{state.mode=mode==="signin"?"signin":"signup";history.replaceState(null,"","auth.html?mode="+state.mode);showForm();setMsg(state.mode==="signin"?"Sign in with your account.":"Create your ReplyFlix account. You must be 18 or older.","neutral")};
   tabs.forEach(t=>t.addEventListener("click",()=>setMode(t.dataset.mode)));
-  forgot?.addEventListener("click",async()=>{const mail=email?.value.trim();if(!mail){setMsg("Enter your email first, then choose FORGOT PASSWORD.","warn");email?.focus();return}forgot.disabled=true;setMsg("Sending password reset email…","neutral");const {error}=await client.auth.resetPasswordForEmail(mail,{redirectTo:TORI_SITE_URL+"/auth.html?mode=recovery"});forgot.disabled=false;if(error)setMsg(error.message||"Could not send password reset email.","warn");else setMsg("Password reset email sent. Check your inbox.","good")});
-  resend?.addEventListener("click",async()=>{const mail=state.pendingEmail||email?.value.trim();if(!mail){setMsg("Enter the account email before resending.","warn");return}resend.disabled=true;const {error}=await client.auth.resend({type:"signup",email:mail,options:{emailRedirectTo:TORI_SITE_URL+"/auth.html"}});resend.disabled=false;if(error)setMsg(error.message||"Could not resend confirmation.","warn");else setMsg("A new confirmation email was sent to "+mail+".","good")});
-  cancelRecovery?.addEventListener("click",()=>setMode("signin"));
-  updatePassword?.addEventListener("click",async()=>{const a=newPassword?.value||"",b=confirmPassword?.value||"";if(a.length<10){setMsg("New password must be at least 10 characters.","warn");return}if(a!==b){setMsg("Passwords do not match.","warn");return}updatePassword.disabled=true;const {error}=await client.auth.updateUser({password:a});updatePassword.disabled=false;if(error){setMsg(error.message||"Could not update password.","warn");return}await signOutLocal();history.replaceState(null,"","auth.html?mode=signin");state.recovery=false;showForm();setMsg("Password updated. Sign in with the new password.","good")});
-  signOut?.addEventListener("click",async()=>{signOut.disabled=true;await signOutLocal();signOut.disabled=false;state.mode="signin";history.replaceState(null,"","auth.html?mode=signin");showForm();setMsg("Signed out.","good")});
-  form.addEventListener("submit",async e=>{e.preventDefault();const mail=email?.value.trim()||"",pass=password?.value||"";if(!mail||!pass){setMsg("Email and password are required.","warn");return}if(pass.length<10){setMsg("Password must be at least 10 characters.","warn");return}if(state.mode==="signup"){if(!fullName?.value.trim()){setMsg("Enter your full name.","warn");fullName?.focus();return}if(!isAdultDate(dob?.value)){setMsg("TORI requires users to be 18 or older.","warn");return}if(!ageCheck?.checked||!termsCheck?.checked){setMsg("Confirm your age and accept the policies.","warn");return}}submit.disabled=true;submit.textContent=state.mode==="signup"?"CREATING…":"SIGNING IN…";if(state.mode==="signup"){const {data,error}=await client.auth.signUp({email:mail,password:pass,options:{emailRedirectTo:TORI_SITE_URL+"/auth.html",data:{full_name:fullName.value.trim(),date_of_birth:dob.value,age_attested:true,terms_accepted_at:new Date().toISOString(),terms_version:"2026-09-23"}}});submit.disabled=false;if(error){setMsg(error.message||"Could not create account.","warn");return}if(data?.user&&Array.isArray(data.user.identities)&&data.user.identities.length===0){state.mode="signin";history.replaceState(null,"","auth.html?mode=signin");showForm();setMsg("An account with this email already exists. Sign in instead, or use FORGOT PASSWORD if needed.","warn");return}state.pendingEmail=data?.user?.email||mail;if(data?.session)await signOutLocal();showPending(state.pendingEmail);return}const {data,error}=await client.auth.signInWithPassword({email:mail,password:pass});submit.disabled=false;if(error){showForm();setMsg(error.message||"Sign in failed.","warn");return}await renderSession(data.session)});
-  const handleAuthCallbackError=()=>{const h=new URLSearchParams((location.hash||"").replace(/^#/,"")),q=new URLSearchParams(location.search);const code=h.get("error_code")||q.get("error_code"),desc=h.get("error_description")||q.get("error_description"),msgText=code||desc;if(msgText){setMsg(decodeURIComponent(String(desc||msgText).replace(/\\+/g," ")), "warn");return true}return false};
-  (async()=>{maxDob();handleAuthCallbackError();const mode=new URLSearchParams(location.search).get("mode");if(mode==="recovery"){state.recovery=true;hide(form,true);hide(pending,true);hide(signedIn,true);hide(recoveryPanel,false);tabs.forEach(t=>t.classList.remove("active"));return}if(mode==="profile"){history.replaceState(null,"","auth.html?mode=signin");showForm();return}showForm();const {data}=await client.auth.getSession();await renderSession(data.session)})();
-  client.auth.onAuthStateChange((event,session)=>{if(event==="PASSWORD_RECOVERY"){state.recovery=true;hide(form,true);hide(signedIn,true);hide(pending,true);hide(recoveryPanel,false);return}if(event==="SIGNED_IN"||event==="INITIAL_SESSION")setTimeout(()=>renderSession(session),0);if(event==="SIGNED_OUT"&&!state.pendingEmail&&!state.recovery)setTimeout(()=>{showForm();setMsg("Signed out.","neutral")},0)});
+  signOut?.addEventListener("click",async()=>{signOut.disabled=true;try{await apiFetch('/auth/signout',{method:'POST'})}catch{}clearSessionToken();window.__REPLYFLIX_ACCESS=null;signOut.disabled=false;state.mode="signin";history.replaceState(null,"","auth.html?mode=signin");showForm();setMsg("Signed out.","good")});
+  form.addEventListener("submit",async e=>{
+    e.preventDefault();const mail=email?.value.trim().toLowerCase()||"",pass=password?.value||"";
+    if(!mail||!pass){setMsg("Email and password are required.","warn");return}
+    if(pass.length<10){setMsg("Password must be at least 10 characters.","warn");return}
+    if(state.mode==="signup"){
+      if(!fullName?.value.trim()){setMsg("Enter your full name.","warn");fullName?.focus();return}
+      if(!isAdultDate(dob?.value)){setMsg("ReplyFlix requires users to be 18 or older.","warn");return}
+      if(!ageCheck?.checked||!termsCheck?.checked){setMsg("Confirm your age and accept the policies.","warn");return}
+    }
+    submit.disabled=true;submit.textContent=state.mode==="signup"?"CREATING…":"SIGNING IN…";
+    try{
+      const data=await apiFetch(state.mode==="signup"?'/auth/signup':'/auth/signin',{method:'POST',body:JSON.stringify(state.mode==="signup"?{
+        email:mail,password:pass,full_name:fullName.value.trim(),date_of_birth:dob.value,
+        age_attested:true,terms_accepted_at:new Date().toISOString(),terms_version:"2026-09-23"
+      }:{email:mail,password:pass})});
+      if(data?.session_token)try{sessionStorage.setItem('replyflix_session',data.session_token)}catch{}
+      window.__REPLYFLIX_ACCESS={user:data.user,profile:data.profile};
+      submit.disabled=false;
+      showSigned(data.user);
+    }catch(err){
+      submit.disabled=false;showForm();setMsg(err.message||"Authentication failed.","warn");
+    }
+  });
+  (async()=>{
+    maxDob();showForm();
+    try{const data=await apiFetch('/auth/me');window.__REPLYFLIX_ACCESS={user:data.user,profile:data.profile};showSigned(data.user)}
+    catch{setMsg(state.mode==="signin"?"Sign in with your account.":"Create your ReplyFlix account. You must be 18 or older.","neutral")}
+  })();
 }
-
 
 function initTheme(){
   const root=document.documentElement;
@@ -344,99 +367,49 @@ function initTheme(){
 
 function initSourceConnectors(accessArg){
   if(!$('messageList'))return;
-  const access=accessArg||window.__TORI_ACCESS;if(!access)return;
-  const {client,user}=access,cfg=window.TORI_CONNECTORS||{},labels={whatsapp:'WhatsApp Business',instagram:'Instagram',messenger:'Messenger',telegram:'Telegram',email:'Email',website:'Website'};
-  let integrations=(access.profile?.integrations&&typeof access.profile.integrations==='object')?access.profile.integrations:{};
-  const validLink=(source,value)=>{
-    try{
-      const u=new URL(value);if(u.protocol!=='https:'&&u.protocol!=='http:')return false;
-      if(source==='whatsapp')return /(^|\.)wa\.me$|(^|\.)whatsapp\.com$/i.test(u.hostname);
-      if(source==='instagram')return /(^|\.)instagram\.com$/i.test(u.hostname);
-      return true;
-    }catch{return false}
-  };
-  const saveIntegrations=async next=>{
-    const {error}=await client.from('profiles').update({integrations:next,updated_at:new Date().toISOString()}).eq('id',user.id);
-    if(error){toast(error.message||'Could not save connection.');return false}
-    integrations=next;access.profile.integrations=next;return true;
-  };
+  const access=accessArg||window.__REPLYFLIX_ACCESS;if(!access)return;
+  const labels={whatsapp:'WhatsApp Business',instagram:'Instagram',messenger:'Messenger',telegram:'Telegram',email:'Email',website:'Website'};
+  let integrations=access.profile?.integrations&&typeof access.profile.integrations==='object'?access.profile.integrations:{};
+  const validLink=(source,value)=>{try{const u=new URL(value);if(u.protocol!=='https:'&&u.protocol!=='http:')return false;if(source==='whatsapp')return /(^|\\.)wa\\.me$|(^|\\.)whatsapp\\.com$/i.test(u.hostname);if(source==='instagram')return /(^|\\.)instagram\\.com$/i.test(u.hostname);return true}catch{return false}};
+  const saveIntegrations=async next=>{try{await apiFetch('/profile',{method:'PUT',body:JSON.stringify({integrations:next})});integrations=next;access.profile.integrations=next;return true}catch(e){toast(e.message||'Could not save connection.');return false}};
   let modal=document.querySelector('.connectorModal');
   if(!modal){
     modal=document.createElement('div');modal.className='connectorModal';modal.hidden=true;
-    modal.innerHTML='<div class="connectorDialog" role="dialog" aria-modal="true" aria-labelledby="connectorTitle"><div class="connectorDialogHead"><div><div class="kicker">TORI / CONNECTION</div><h3 id="connectorTitle">CONNECT CHANNEL</h3></div><button class="connectorClose" id="connectorClose" type="button" aria-label="Close">×</button></div><p id="connectorCopy"></p><div class="connectorOption"><strong>Platform authorization</strong><span id="connectorAuthStatus">Provider authorization is not configured yet.</span><div class="connectorActions"><button class="btn" id="connectorAuthorize" type="button">AUTHORIZE ACCOUNT</button></div></div><div class="connectorOption"><strong>Direct business link</strong><span>Save the public link you want TORI to open for this channel. This does not grant API message access.</span><input class="connectLinkInput" id="connectorLink" type="url" placeholder="https://…"><div class="connectorActions"><button class="btn dark" id="connectorSaveLink" type="button">SAVE LINK</button><button class="btn dark" id="connectorOpenLink" type="button" hidden>OPEN LINK</button></div><div class="connectHint" id="connectorHint">Use a secure HTTPS link from the official platform.</div></div><div class="connectHint">Authorization and message syncing are controlled by the platform. TORI never asks you to paste passwords or private access tokens here.</div></div>';
-    document.body.appendChild(modal);
-    modal.addEventListener('click',e=>{if(e.target===modal)modal.hidden=true;});
-    document.getElementById('connectorClose')?.addEventListener('click',()=>{modal.hidden=true;});
+    modal.innerHTML='<div class="connectorDialog" role="dialog" aria-modal="true" aria-labelledby="connectorTitle"><div class="connectorDialogHead"><div><div class="kicker">ReplyFlix / CONNECTION</div><h3 id="connectorTitle">CONNECT CHANNEL</h3></div><button class="connectorClose" id="connectorClose" type="button" aria-label="Close">×</button></div><p id="connectorCopy"></p><div class="connectorOption"><strong>Provider authorization</strong><span id="connectorAuthStatus">Provider authorization is not configured yet.</span><div class="connectorActions"><button class="btn" id="connectorAuthorize" type="button" disabled>AUTHORIZE · SETUP REQUIRED</button></div></div><div class="connectorOption"><strong>Direct business link</strong><span>Save the public link you want ReplyFlix to open for this channel.</span><input class="connectLinkInput" id="connectorLink" type="url" placeholder="https://…"><div class="connectorActions"><button class="btn dark" id="connectorSaveLink" type="button">SAVE LINK</button><button class="btn dark" id="connectorOpenLink" type="button" hidden>OPEN LINK</button></div><div class="connectHint" id="connectorHint">Use a secure HTTPS link from the official platform.</div></div></div>';
+    document.body.appendChild(modal);modal.addEventListener('click',e=>{if(e.target===modal)modal.hidden=true});document.getElementById('connectorClose')?.addEventListener('click',()=>{modal.hidden=true});
   }
-  let active='';
-  const renderCards=()=>{
-    document.querySelectorAll('[data-source]').forEach(b=>{
-      const saved=!!integrations[b.dataset.source]?.link;
-      b.textContent=saved?'OPEN LINK':'CONNECT';
-      b.classList.toggle('linked',saved);b.classList.toggle('primary',!saved);
-    });
-  };
-  document.querySelectorAll('[data-source]').forEach(b=>b.addEventListener('click',()=>{
-    active=b.dataset.source;const name=labels[active]||active.toUpperCase(),item=integrations[active]||{},conf=cfg[active]||{};
-    document.getElementById('connectorTitle').textContent='CONNECT '+name.toUpperCase();
-    document.getElementById('connectorCopy').textContent='Choose platform authorization when TORI is configured for this provider, or save the business link now for a clean one-click workflow.';
-    document.getElementById('connectorLink').value=item.link||'';
-    document.getElementById('connectorOpenLink').hidden=!item.link;
-    const auth=document.getElementById('connectorAuthorize'),status=document.getElementById('connectorAuthStatus');
-    auth.disabled=!conf.authUrl;auth.textContent=conf.authUrl?'AUTHORIZE ACCOUNT':'AUTHORIZE · SETUP REQUIRED';
-    status.textContent=conf.authUrl?'Platform authorization is ready. The platform will ask you to approve access.':'The public site is ready for the OAuth flow, but the provider app credentials/authorization URL still need to be configured.';
-    modal.hidden=false;
-  }));
-  document.getElementById('connectorSaveLink')?.addEventListener('click',async()=>{
-    const value=document.getElementById('connectorLink').value.trim();
-    if(!active||!validLink(active,value)){toast('Enter a valid platform link.');return}
-    const next={...integrations,[active]:{link:value,linkedAt:new Date().toISOString(),mode:'link'}};
-    if(!await saveIntegrations(next))return;
-    document.getElementById('connectorOpenLink').hidden=false;renderCards();toast((labels[active]||active)+' link saved.');
-  });
-  document.getElementById('connectorOpenLink')?.addEventListener('click',()=>{
-    const value=integrations[active]?.link;if(value)window.open(value,'_blank','noopener,noreferrer');
-  });
-  document.getElementById('connectorAuthorize')?.addEventListener('click',()=>{
-    const url=cfg[active]?.authUrl;if(url)window.location.href=url;
-  });
-  renderCards();
+  document.querySelectorAll('[data-source]').forEach(b=>b.addEventListener('click',()=>{const active=b.dataset.source,item=integrations[active]||{};document.getElementById('connectorTitle').textContent='CONNECT '+(labels[active]||active).toUpperCase();document.getElementById('connectorCopy').textContent='Save the business link now; provider API connectors can be added later.';document.getElementById('connectorLink').value=item.link||'';document.getElementById('connectorOpenLink').hidden=!item.link;modal.hidden=false;document.getElementById('connectorSaveLink').onclick=async()=>{const value=document.getElementById('connectorLink').value.trim();if(!validLink(active,value)){toast('Enter a valid platform link.');return}const next={...integrations,[active]:{link:value,linkedAt:new Date().toISOString(),mode:'link'}};if(await saveIntegrations(next)){document.getElementById('connectorOpenLink').hidden=false;toast((labels[active]||active)+' link saved.')}};document.getElementById('connectorOpenLink').onclick=()=>{const v=integrations[active]?.link;if(v)window.open(v,'_blank','noopener,noreferrer')}}));
 }
-
 function initProtectedPage(){
   if(document.body?.dataset.protected!=="true")return;
-  ensureToriAccess(true).then(async x=>{
-    window.__TORI_ACCESS=x||null;
-    if(x?.profile?.knowledge&&typeof x.profile.knowledge==="object"&&Object.keys(x.profile.knowledge).length){
-      K=normalizePack(x.profile.knowledge);save();render();
-    }
+  ensureReplyFlixAccess(true).then(async x=>{
+    if(x?.profile?.knowledge&&typeof x.profile.knowledge==="object"&&Object.keys(x.profile.knowledge).length){K=normalizePack(x.profile.knowledge);localStorage.setItem(STORE,JSON.stringify(K));render();}
   });
 }
 async function initMessages(){
   if(!$("messageList")||document.body?.dataset.protected!=="true")return;
-  const access=window.__TORI_ACCESS||await ensureToriAccess(true);if(!access)return;
-  const {client,user}=access,state={messages:[],selected:null,filter:"all",profile:access.profile};
-  if(state.profile?.knowledge&&typeof state.profile.knowledge==="object"&&Object.keys(state.profile.knowledge).length)K=normalizePack(state.profile.knowledge);
+  const access=window.__REPLYFLIX_ACCESS||await ensureReplyFlixAccess(true);if(!access)return;
+  const state={messages:[],selected:null,filter:"all",profile:access.profile};
+  if(state.profile?.knowledge&&typeof state.profile.knowledge==="object"&&Object.keys(state.profile.knowledge).length){K=normalizePack(state.profile.knowledge);localStorage.setItem(STORE,JSON.stringify(K))}
   const limits=p=>p==="premium"?100:p==="pro"?25:5;
   const label=s=>({whatsapp:"WHATSAPP",instagram:"INSTAGRAM",messenger:"MESSENGER",telegram:"TELEGRAM",email:"EMAIL",website:"WEBSITE",manual:"MANUAL"}[s]||String(s||"SOURCE").toUpperCase());
   const fmt=v=>{try{return new Intl.DateTimeFormat(undefined,{dateStyle:"medium",timeStyle:"short"}).format(new Date(v))}catch{return String(v||"")}};
   const txt=(id,v)=>{const e=$(id);if(e)e.textContent=v};
   const updateToggle=enabled=>{const n=document.querySelector(".toggleRow .smallNote");if(n)n.textContent=enabled?"Auto replies only run for confident, grounded answers. Turn this off anytime.":"Auto reply is OFF. Messages stay in review until you reply manually."};
   const analyzeMsg=m=>{try{return analyze(m.body)}catch{return{confidence:0,status:"neutral",response:"",missing:["analysis"],intents:[]}}};
-  const load=async()=>{const {data,error}=await client.from("messages").select("*").order("received_at",{ascending:false}).limit(150);if(error){toast(error.message||"Could not load messages.");return}state.messages=data||[];txt("storedCount",state.messages.length+" / "+limits(state.profile?.plan));txt("replyCount",state.messages.filter(x=>["auto_replied","manual_reply"].includes(x.status)).length+" / "+limits(state.profile?.plan));txt("planName",(state.profile?.plan||"free").toUpperCase());renderList();renderDetail()};
+  const load=async()=>{try{const r=await apiFetch('/messages');state.messages=r.messages||[];txt("storedCount",state.messages.length+" / "+limits(state.profile?.plan));txt("replyCount",state.messages.filter(x=>["auto_replied","manual_reply"].includes(x.status)).length+" / "+limits(state.profile?.plan));txt("planName",(state.profile?.plan||"free").toUpperCase());renderList();renderDetail()}catch(e){toast(e.message||"Could not load messages.")}};
   const visible=()=>state.filter==="all"?state.messages:state.messages.filter(x=>x.status===state.filter);
-  const renderList=()=>{const list=$("messageList"),items=visible();txt("inboxCount",items.length);if(!items.length){list.innerHTML='<div class="emptyState">No messages in this view.</div>';return}list.innerHTML=items.map(x=>{const tag=x.status==="review"?'<span class="tag red">REVIEW</span>':x.status==="auto_replied"?'<span class="tag green">AUTO-REPLIED</span>':x.status==="manual_reply"?'<span class="tag green">REPLIED</span>':'<span class="tag gray">'+esc(String(x.status||"OPEN").toUpperCase())+'</span>';return '<div class="messageItem'+(state.selected===x.id?" active":"")+'" data-message-id="'+x.id+'"><div class="messageItemTop"><div class="messageSender">'+esc(x.sender_name||x.sender_handle||"Customer")+'</div><div class="messageTime">'+esc(fmt(x.received_at))+'</div></div><div class="messagePreview">'+esc(x.body)+'</div><div class="tagRow"><span class="tag gray">'+esc(label(x.source))+'</span>'+tag+'</div></div>'}).join("");list.querySelectorAll("[data-message-id]").forEach(el=>el.onclick=()=>{state.selected=el.dataset.messageId;renderList();renderDetail()})};
-  const renderDetail=()=>{const box=$("detailBody"),m=state.messages.find(x=>x.id===state.selected);if(!m){txt("detailTitle","SELECT A MESSAGE");txt("detailStatus","—");box.innerHTML='<div class="emptyState">Select a message from the inbox to review it.</div>';return}txt("detailTitle",m.sender_name||m.sender_handle||"Customer");txt("detailStatus",label(m.source)+" · "+String(m.status||"OPEN").toUpperCase());const a=analyzeMsg(m),tag=m.status==="review"?'<span class="tag red">RED · REVIEW REQUIRED</span>':m.status==="auto_replied"?'<span class="tag green">AUTO-REPLIED</span>':'<span class="tag gray">'+esc(String(m.status||"OPEN").toUpperCase())+'</span>';box.innerHTML='<div class="messageMeta"><span>'+esc(label(m.source))+'</span><span>'+esc(fmt(m.received_at))+'</span><span>BUSINESS '+Number(m.relevance_confidence||0)+'%</span><span>REPLY '+Number(a.confidence||m.reply_confidence||0)+'%</span></div><div class="tagRow">'+tag+'</div><div class="messageBody">'+esc(m.body)+'</div><div class="replyBox"><div class="field"><label>TORI RESPONSE</label><textarea id="replyDraft" placeholder="Write a response or use TORI draft.">'+esc(m.reply_text||a.response||"")+'</textarea></div><div class="replyActions"><button class="btn" id="sendManualReply">MARK REPLIED</button><button class="btn dark" id="useToriDraft">USE TORI DRAFT</button><button class="mini" id="ignoreMessage">IGNORE</button></div><div class="helper">'+(a.status==="good"?"TORI has enough configured facts for a grounded draft.":"TORI is not confident enough to auto-answer this message; review it before sending.")+'</div></div>';$("useToriDraft")?.addEventListener("click",()=>{$("replyDraft").value=a.response||""});$("ignoreMessage")?.addEventListener("click",async()=>{const {error}=await client.from("messages").update({status:"ignored"}).eq("id",m.id);if(error){toast(error.message);return}m.status="ignored";renderList();renderDetail();toast("Message moved out of the active inbox.")});$("sendManualReply")?.addEventListener("click",async()=>{const t=$("replyDraft").value.trim();if(!t){toast("Write a reply first.");return}const {data,error}=await client.rpc("tori_mark_reply",{p_message_id:m.id,p_reply_text:t,p_status:"manual_reply"});if(error){toast(error.message);return}Object.assign(m,data);renderList();renderDetail();toast("Reply recorded. A live channel connector is required to dispatch it externally.")})};
-  const maybeAutoReply=async()=>{if(!state.profile?.auto_reply_enabled)return;const pending=state.messages.filter(x=>x.business_related&&x.status==="review"&&x.source==="manual");for(const m of pending){const a=analyzeMsg(m);if(a.status!=="good"||!a.response||a.missing.length)continue;const {data,error}=await client.rpc("tori_mark_reply",{p_message_id:m.id,p_reply_text:a.response,p_status:"auto_replied"});if(!error&&data){Object.assign(m,data)}}};
+  const renderList=()=>{const list=$("messageList"),items=visible();txt("inboxCount",items.length);if(!items.length){list.innerHTML='<div class="emptyState">No messages in this view.</div>';return}list.innerHTML=items.map(x=>{const tag=x.status==="review"?'<span class="tag red">REVIEW</span>':x.status==="auto_replied"?'<span class="tag green">AUTO-REPLIED</span>':x.status==="manual_reply"?'<span class="tag green">REPLIED</span>':'<span class="tag gray">'+esc(String(x.status||"OPEN").toUpperCase())+'</span>';return '<div class="messageItem'+(state.selected===x.id?" active":"")+'" data-message-id="'+esc(x.id)+'"><div class="messageItemTop"><div class="messageSender">'+esc(x.sender_name||x.sender_handle||"Customer")+'</div><div class="messageTime">'+esc(fmt(x.received_at))+'</div></div><div class="messagePreview">'+esc(x.body)+'</div><div class="tagRow"><span class="tag gray">'+esc(label(x.source))+'</span>'+tag+'</div></div>'}).join("");list.querySelectorAll("[data-message-id]").forEach(el=>el.onclick=()=>{state.selected=el.dataset.messageId;renderList();renderDetail()})};
+  const renderDetail=()=>{const box=$("detailBody"),m=state.messages.find(x=>x.id===state.selected);if(!m){txt("detailTitle","SELECT A MESSAGE");txt("detailStatus","—");box.innerHTML='<div class="emptyState">Select a message from the inbox to review it.</div>';return}txt("detailTitle",m.sender_name||m.sender_handle||"Customer");txt("detailStatus",label(m.source)+" · "+String(m.status||"OPEN").toUpperCase());const a=analyzeMsg(m),tag=m.status==="review"?'<span class="tag red">RED · REVIEW REQUIRED</span>':m.status==="auto_replied"?'<span class="tag green">AUTO-REPLIED</span>':'<span class="tag gray">'+esc(String(m.status||"OPEN").toUpperCase())+'</span>';box.innerHTML='<div class="messageMeta"><span>'+esc(label(m.source))+'</span><span>'+esc(fmt(m.received_at))+'</span><span>BUSINESS '+Number(m.relevance_confidence||0)+'%</span><span>REPLY '+Number(a.confidence||m.reply_confidence||0)+'%</span></div><div class="tagRow">'+tag+'</div><div class="messageBody">'+esc(m.body)+'</div><div class="replyBox"><div class="field"><label>REPLYFLIX RESPONSE</label><textarea id="replyDraft" placeholder="Write a response or use ReplyFlix draft.">'+esc(m.reply_text||a.response||"")+'</textarea></div><div class="replyActions"><button class="btn" id="sendManualReply">MARK REPLIED</button><button class="btn dark" id="useToriDraft">USE REPLYFLIX DRAFT</button><button class="mini" id="ignoreMessage">IGNORE</button></div><div class="helper">'+(a.status==="good"?"ReplyFlix has enough configured facts for a grounded draft.":"ReplyFlix is not confident enough to auto-answer this message; review it before sending.")+'</div></div>';$("useToriDraft")?.addEventListener("click",()=>{$("replyDraft").value=a.response||""});$("ignoreMessage")?.addEventListener("click",async()=>{try{await apiFetch('/messages/'+encodeURIComponent(m.id),{method:'PATCH',body:JSON.stringify({status:"ignored"})});m.status="ignored";renderList();renderDetail();toast("Message moved out of the active inbox.")}catch(e){toast(e.message)}});$("sendManualReply")?.addEventListener("click",async()=>{const t=$("replyDraft").value.trim();if(!t){toast("Write a reply first.");return}try{const r=await apiFetch('/messages/'+encodeURIComponent(m.id),{method:'PATCH',body:JSON.stringify({status:"manual_reply",reply_text:t})});Object.assign(m,r.message);renderList();renderDetail();toast("Reply recorded. A live channel connector is required to dispatch it externally.")}catch(e){toast(e.message||"Could not save reply.")}})};
+  const maybeAutoReply=async()=>{if(!state.profile?.auto_reply_enabled)return;const pending=state.messages.filter(x=>x.business_related&&x.status==="review"&&x.source==="manual");for(const m of pending){const a=analyzeMsg(m);if(a.status!=="good"||!a.response||a.missing.length)continue;try{const r=await apiFetch('/messages/'+encodeURIComponent(m.id),{method:'PATCH',body:JSON.stringify({status:"auto_replied",reply_text:a.response})});if(r?.message)Object.assign(m,r.message)}catch{}}};
   document.querySelectorAll("[data-filter]").forEach(b=>b.addEventListener("click",()=>{state.filter=b.dataset.filter;document.querySelectorAll("[data-filter]").forEach(x=>x.classList.toggle("active",x===b));renderList()}));
   $("refreshMessages")?.addEventListener("click",async()=>{await load();await maybeAutoReply();await load();toast("Inbox refreshed.")});
-  $("autoReplyToggle")?.addEventListener("change",async e=>{const enabled=e.target.checked,{error}=await client.from("profiles").update({auto_reply_enabled:enabled,updated_at:new Date().toISOString()}).eq("id",user.id);if(error){e.target.checked=!enabled;toast(error.message);return}state.profile.auto_reply_enabled=enabled;updateToggle(enabled);toast(enabled?"Auto reply enabled.":"Auto reply disabled.")});
-  $("addManualMessage")?.addEventListener("click",async()=>{const body=$("manualMessage")?.value.trim()||"",source=$("manualSource")?.value||"manual",sender=$("manualSender")?.value.trim()||"Customer";if(!body){toast("Enter a customer message first.");return}const a=analyzeMsg({body});if(a.confidence<40||!a.intents?.length){toast("TORI kept this out: it does not look sufficiently business-related.");return}const auto=state.profile.auto_reply_enabled&&a.status==="good"&&!a.missing.length&&source==="manual";const {data,error}=await client.rpc("tori_store_message",{p_source:source,p_body:body,p_sender_name:sender,p_received_at:new Date().toISOString(),p_business_related:true,p_relevance_confidence:Math.max(40,a.confidence),p_reply_confidence:a.confidence,p_status:auto?"auto_replied":"review",p_reply_text:auto?a.response:null,p_metadata:{test:true,analysis_status:a.status,dispatch:"manual_test"}});if(error){toast(error.message||"Could not store message.");return}state.selected=data?.id||null;$("manualMessage").value="";$("manualSender").value="";await load();toast(auto?"Business message stored and auto-reply simulated for the local test flow.":"Business message stored for review.")});
+  $("autoReplyToggle")?.addEventListener("change",async e=>{const enabled=e.target.checked;try{await apiFetch('/profile',{method:'PUT',body:JSON.stringify({auto_reply_enabled:enabled})});state.profile.auto_reply_enabled=enabled;updateToggle(enabled);toast(enabled?"Auto reply enabled.":"Auto reply disabled.")}catch(err){e.target.checked=!enabled;toast(err.message)}});
+  $("addManualMessage")?.addEventListener("click",async()=>{const body=$("manualMessage")?.value.trim()||"",source=$("manualSource")?.value||"manual",sender=$("manualSender")?.value.trim()||"Customer";if(!body){toast("Enter a customer message first.");return}const a=analyzeMsg({body});if(a.confidence<40||!a.intents?.length){toast("ReplyFlix kept this out: it does not look sufficiently business-related.");return}const auto=state.profile.auto_reply_enabled&&a.status==="good"&&!a.missing.length&&source==="manual";try{const r=await apiFetch('/messages',{method:'POST',body:JSON.stringify({source,body,sender_name:sender,received_at:new Date().toISOString(),business_related:true,relevance_confidence:Math.max(40,a.confidence),reply_confidence:a.confidence,status:auto?"auto_replied":"review",reply_text:auto?a.response:null,metadata:{test:true,analysis_status:a.status,dispatch:"manual_test"}})});state.selected=r.message?.id||null;$("manualMessage").value="";$("manualSender").value="";await load();toast(auto?"Business message stored and auto-reply simulated for the local test flow.":"Business message stored for review.")}catch(e){toast(e.message||"Could not store message.")}});
   initSourceConnectors(access);
   $("autoReplyToggle").checked=!!state.profile?.auto_reply_enabled;updateToggle(!!state.profile?.auto_reply_enabled);
   await load();await maybeAutoReply();await load();
 }
-
 
 function init(){
   document.querySelectorAll('[data-page]').forEach(a=>{if(a.getAttribute('href')===location.pathname.split('/').pop()||((!location.pathname.split('/').pop()||location.pathname.endsWith('/'))&&a.getAttribute('href')==='index.html'))a.classList.add('active')});
@@ -448,10 +421,10 @@ function init(){
   if($('analyze'))$('analyze').onclick=runAnalysis;if($('teach'))$('teach').onclick=teach;
   document.querySelectorAll('[data-example]').forEach(b=>b.onclick=()=>setExample(b.dataset.example));
   if($('incoming'))$('incoming').addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter')runAnalysis()});
-  if($('exportPack'))$('exportPack').onclick=()=>{readProfile();const blob=new Blob([JSON.stringify(K,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='tori-knowledge.json';a.click();URL.revokeObjectURL(a.href);toast('Knowledge pack exported.')};
-  if($('importFile'))$('importFile').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const x=JSON.parse(rd.result);if(!x.business||typeof x.business!=='object')throw new Error('Invalid');K=normalizePack(x);save();render();toast('Knowledge pack imported.')}catch{toast('Invalid TORI knowledge file.')}};rd.readAsText(f)};
+  if($('exportPack'))$('exportPack').onclick=()=>{readProfile();const blob=new Blob([JSON.stringify(K,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='replyflix-knowledge.json';a.click();URL.revokeObjectURL(a.href);toast('Knowledge pack exported.')};
+  if($('importFile'))$('importFile').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const x=JSON.parse(rd.result);if(!x.business||typeof x.business!=='object')throw new Error('Invalid');K=normalizePack(x);save();render();toast('Knowledge pack imported.')}catch{toast('Invalid ReplyFlix knowledge file.')}};rd.readAsText(f)};
   render();if($('incoming'))resetResult();
   initTheme();initAuth();initProtectedPage();initMessages();
 }
-window.TORI={analyze,load:()=>K,save,normalize,INTENTS,reset:()=>{K=blank();save();return K}};
+window.ReplyFlix={analyze,load:()=>K,save,normalize,INTENTS,reset:()=>{K=blank();save();return K}};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
