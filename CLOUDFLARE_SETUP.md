@@ -32,6 +32,6 @@ Email verification sends through Resend. Configure the Worker secret `RESEND_API
 
 Set `ALLOWED_ORIGIN` to the real frontend origin, configure the Worker route, replace the D1 database ID, fill the legal placeholders, and document real retention/deletion practices.
 
-## Database migration
+## Email verification
 
-Apply `migrations/0002_email_verification.sql` to the remote D1 database before serving new signups. Existing users are preserved as verified; new signups are marked unverified until they click the email link.
+The Worker adds the email-verification columns to an existing `users` table automatically through its schema check. Existing accounts are preserved as verified; new signups remain unverified until the Resend link is used.
