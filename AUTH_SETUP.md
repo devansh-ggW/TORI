@@ -1,60 +1,33 @@
-# TORI authentication and account setup
+# ReplyFlix Cloudflare backend
 
-The website is wired to the Supabase project `tori` and uses its public publishable key from `tori-config.js`.
+ReplyFlix uses a Cloudflare Worker + D1 for accounts, sessions, business profiles, knowledge and message storage.
 
-## Email authentication
+## Create the D1 database
 
-Email/password sign-up and sign-in are implemented in `app.js`. Keep Supabase email confirmation enabled so a newly created email account must verify ownership before access.
+`npx wrangler d1 create replyflix`
 
-## Account authentication
+Copy the returned database ID into `wrangler.toml`.
 
-TORI uses email/password authentication. Email sign-ups require verification before access. Google sign-in is not part of the current product flow.
+## Apply the schema
 
-## Age and eligibility
+`npx wrangler d1 migrations apply replyflix --local`
 
-TORI requires users to be 18 or older. Email sign-up validates the date of birth before calling Supabase, and the database also rejects under-18 dates. Google sign-in accounts without an age-verified profile are shown an age gate before the account can open protected product areas.
+For production:
 
-Users attest that the information they submit is truthful. This is an eligibility control, not a guarantee about identity or a substitute for jurisdiction-specific legal requirements.
+`npx wrangler d1 migrations apply replyflix --remote`
 
-## Protected areas
+## Deploy
 
-Knowledge Studio, Core Lab and Messages require an authenticated account with an age-verified profile.
+`npx wrangler deploy`
 
-## Messages
+The frontend uses `/api` by default. Route the Worker on the same ReplyFlix hostname, or set `apiBase` in `replyflix-config.js` to the Worker URL.
 
-Business-related messages are stored in `public.messages` only after the business-message filter accepts them. The generic Supabase Edge Function `tori-ingest-message` is live and requires a valid Supabase JWT.
+## Backend included
 
-Current plan limits are enforced in the database:
+Email/password sign-up and sign-in, 18+ validation, PBKDF2 password hashing using Workers Web Crypto, secure sessions, business profile/knowledge persistence, channel-link persistence, message storage/review/reply/ignore, plan limits, and password change are implemented.
 
-- Free: 5 stored messages / 5 replies
-- Pro: 25 stored messages / 25 replies
-- Premium: 100 stored messages / 100 replies
+Password-reset email delivery is not faked. Add a transactional email provider before exposing a forgot-password flow.
 
-Checkout and plan upgrades are not active yet.
+## Production
 
-## Before launch
-
-Replace the placeholders in the legal pages with the real legal business name, addresses, contact emails, governing law, retention/deletion practices, and any platform-specific connector disclosures.
-
-Verify the deployed site URL in Supabase Auth URL Configuration:
-
-`https://tori.dewify.shop`
-
-Also add that exact production URL to the Supabase redirect allow list and complete the Google provider configuration before advertising Google login.
-
-
-## Troubleshooting a Supabase URL error
-
-If authentication sends the browser to a URL shaped like:
-
-`https://irutkjcwxpkjwoayuzij.supabase.co/tori.dewify.shop#access_token=...`
-
-the Supabase Auth URL configuration is malformed. In the Supabase Dashboard, set the **Site URL** to exactly:
-
-`https://tori.dewify.shop`
-
-and add this exact production redirect URL:
-
-`https://tori.dewify.shop/auth.html`
-
-Do not enter `tori.dewify.shop` without `https://`. The Google provider still uses the Supabase callback URL shown by Supabase for Google Cloud configuration; the final redirect target is the TORI domain above.
+Set `ALLOWED_ORIGIN` to the actual frontend origin, configure the Worker route, replace the D1 database ID, fill legal placeholders, and document retention/deletion practices.
