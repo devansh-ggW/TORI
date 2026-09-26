@@ -293,7 +293,7 @@ function initAuth(){
   const nameField=$("nameField"),dobField=$("dobField"),ageAttest=$("ageAttest"),termsAttest=$("termsAttest");
   const fullName=$("fullName"),dob=$("dateOfBirth"),email=$("email"),password=$("password"),ageCheck=$("ageCheck"),termsCheck=$("termsCheck");
   const signedIn=$("signedIn"),signedEmail=$("signedEmail"),signOut=$("signOut");
-  const verificationState=$("verificationState"),verificationEmail=$("verificationEmail"),resendVerification=$("resendVerification"),backToAuth=$("backToAuth");
+  const verificationState=$("verificationState"),verificationEmail=$("verificationEmail"),resendVerification=$("resendVerification"),backToAuth=$("backToAuth"),backToAuthFromConfirmation=$("backToAuthFromConfirmation");
   const existingAccountState=$("existingAccountState"),existingAccountChoice=$("existingAccountChoice"),existingAccountPassword=$("existingAccountPassword"),continueExisting=$("continueExisting"),createAnother=$("createAnother"),existingConfirmationState=$("existingConfirmationState"),existingConfirmationEmail=$("existingConfirmationEmail");
   const state={mode:new URLSearchParams(location.search).get("mode")==="signin"?"signin":"signup",requestId:0,allowDuplicateEmail:false,verificationAccountId:""};
   const maxDob=()=>{const d=new Date();d.setFullYear(d.getFullYear()-18);if(dob)dob.max=d.toISOString().slice(0,10)};
@@ -354,6 +354,7 @@ function initAuth(){
 
   tabs.forEach(t=>t.addEventListener("click",()=>setMode(t.dataset.mode)));
   backToAuth?.addEventListener("click",()=>setMode("signin"));
+  backToAuthFromConfirmation?.addEventListener("click",()=>setMode("signin"));
 
   resendVerification?.addEventListener("click",async()=>{
     const mail=String(verificationEmail?.value||"").trim().toLowerCase();
@@ -369,7 +370,7 @@ function initAuth(){
       if(data?.email_id){
         setTimeout(async()=>{
           try{
-            const status=await apiFetch("/auth/verification-status",{method:"POST",body:JSON.stringify({email:mail,email_id:data.email_id})});
+            const status=await apiFetch("/auth/verification-status",{method:"POST",body:JSON.stringify({email:mail,email_id:data.email_id,account_id:state.verificationAccountId||undefined})});
             if(status?.last_event){
               setMsg("Resend status: "+String(status.last_event).toUpperCase()+". ID: "+data.email_id,"good");
             }
@@ -462,7 +463,7 @@ function initAuth(){
           if(sent&&data?.email_id){
             setTimeout(async()=>{
               try{
-                const status=await apiFetch("/auth/verification-status",{method:"POST",body:JSON.stringify({email:mail,email_id:data.email_id})});
+                const status=await apiFetch("/auth/verification-status",{method:"POST",body:JSON.stringify({email:mail,email_id:data.email_id,account_id:state.verificationAccountId||undefined})});
                 if(status?.last_event)setMsg("Resend status: "+String(status.last_event).toUpperCase()+". ID: "+data.email_id,"good");
               }catch{}
             },1800);
