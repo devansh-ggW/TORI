@@ -183,8 +183,9 @@ async function requestExistingAccountConfirmation(request,env){
     const delivery=await issueAccountConfirmationToken(env,request,{id:matched.id,email:matched.email,fullName:matched.full_name});
     return response({ok:true,confirmation_required:true,email:matched.email,account_id:matched.id,email_sent:true,email_id:delivery?.id||null,email_from:delivery?.from||null},200,request,env);
   }catch(err){
-    console.error("account confirmation email:",err);
-    return response({error:"We could not send the confirmation email right now. Please try again shortly.",email_sent:false},503,request,env);
+    const detail=String(err?.message||err||"Unknown Resend error");
+    console.error("account confirmation email:",detail);
+    return response({error:"We could not send the confirmation email right now.",delivery_error:detail,email_sent:false},503,request,env);
   }
 }
 
@@ -260,8 +261,13 @@ async function resendVerification(request,env){
     const emailDelivery=await issueVerificationToken(env,request,user);
     return response({ok:true,message:"A new verification email has been sent.",email_sent:true,email_id:emailDelivery?.id||null,email_from:emailDelivery?.from||null},200,request,env);
   }catch(err){
-    console.error("resend verification:",err);
-    return response({error:"We could not send the verification email right now. Please try again shortly."},503,request,env);
+    const detail=String(err?.message||err||"Unknown Resend error");
+    console.error("resend verification:",detail);
+    return response({
+      error:"We could not send the verification email right now.",
+      delivery_error:detail,
+      email_sent:false
+    },503,request,env);
   }
 }
 
@@ -305,8 +311,15 @@ async function signup(request,env){
     try{
       emailDelivery=await sendVerificationEmail(env,request,{id,email,fullName},verificationToken);
     }catch(err){
-      console.error("verification email:",err);
-      return response({error:"Account created, but the verification email could not be sent yet. Please use RESEND VERIFICATION.",email,verification_required:true,email_sent:false},503,request,env);
+      const detail=String(err?.message||err||"Unknown Resend error");
+      console.error("verification email:",detail);
+      return response({
+        error:"Account created, but the verification email could not be sent.",
+        delivery_error:detail,
+        email,
+        verification_required:true,
+        email_sent:false
+      },503,request,env);
     }
 
     return response({ok:true,email,account_id:id,verification_required:true,email_sent:true,email_id:emailDelivery?.id||null,email_from:emailDelivery?.from||null},201,request,env);
