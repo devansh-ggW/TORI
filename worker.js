@@ -107,7 +107,7 @@ async function signup(request,env){
     return response({user:a.user,profile:a.profile,session_token:token},201,request,env,{"set-cookie":sessionCookie(token)});
   }catch(err){
     console.error("signup stage:",stage,err);
-    return response({error:"Signup failed.",stage},500,request,env);
+    return response({error:"Signup failed.",stage,detail:String(err?.message||err||"unknown error")},500,request,env);
   }
 }
 async function signin(request,env){
@@ -132,7 +132,7 @@ async function signin(request,env){
     return response({user:a.user,profile:a.profile,session_token:token},200,request,env,{"set-cookie":sessionCookie(token)});
   }catch(err){
     console.error("signin stage:",stage,err);
-    return response({error:"Signin failed.",stage},500,request,env);
+    return response({error:"Signin failed.",stage,detail:String(err?.message||err||"unknown error")},500,request,env);
   }
 }
 async function signout(request,env){
