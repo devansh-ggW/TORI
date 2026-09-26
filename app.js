@@ -409,12 +409,14 @@ function initTheme(){
     changing=true;
     const next=theme==='dark'?'light':'dark';
     overlay.classList.remove('run','to-dark','to-light');
+    root.classList.add('theme-changing');
     void overlay.offsetWidth;
     overlay.style.setProperty('--theme-x',((btn?.getBoundingClientRect().left||20)+(btn?.offsetWidth||40)/2)+'px');
     overlay.style.setProperty('--theme-y',((btn?.getBoundingClientRect().top||20)+(btn?.offsetHeight||40)/2)+'px');
     overlay.classList.add('run',next==='dark'?'to-dark':'to-light');
-    const switchAt=240;
-    const finishAt=720;
+
+    const switchAt=180;
+    const finishAt=520;
     setTimeout(()=>{
       theme=next;
       localStorage.setItem(THEME_KEY,theme);
@@ -422,6 +424,7 @@ function initTheme(){
     },switchAt);
     setTimeout(()=>{
       overlay.classList.remove('run','to-dark','to-light');
+      root.classList.remove('theme-changing');
       changing=false;
     },finishAt);
   };
@@ -483,14 +486,23 @@ function renderSiteAuth(access){
 }
 async function initSiteAuth(){
   const actions=document.querySelector(".actions");
+  if(!actions||document.querySelector("#authForm"))return;
+
+  // Theme toggle is owned by initTheme(). Remove only the page's hard-coded
+  // auth/account controls so this area has one source of truth.
+  [...actions.children].forEach(el=>{
+    if(!el.matches("[data-theme-toggle],.themeToggle"))el.remove();
+  });
+
   let auth=document.querySelector(".siteAuth");
-  if(!auth&&actions){
+  if(!auth){
     auth=document.createElement("div");
     auth.className="siteAuth";
     auth.setAttribute("aria-hidden","true");
     actions.appendChild(auth);
   }
-  if(auth)auth.innerHTML="";
+  auth.innerHTML="";
+
   try{
     const data=await apiFetch("/auth/me");
     const access={user:data.user,profile:data.profile};
@@ -500,6 +512,7 @@ async function initSiteAuth(){
     window.__REPLYFLIX_ACCESS=null;
     renderSiteAuth(null);
   }
+
   auth=document.querySelector(".siteAuth");
   if(auth)auth.removeAttribute("aria-hidden");
   window.addEventListener("replyflix:auth-changed",()=>{
