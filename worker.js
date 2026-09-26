@@ -98,7 +98,7 @@ async function sendVerificationEmail(env,request,user,token){
     throw new Error(detail);
   }
   const body=await res.json();
-  return {id:body?.id||null};
+  return {id:body?.id||null,from};
 }
 
 async function issueVerificationToken(env,request,user){
@@ -139,7 +139,7 @@ async function resendVerification(request,env){
 
   try{
     const emailDelivery=await issueVerificationToken(env,request,user);
-    return response({ok:true,message:"A new verification email has been sent.",email_sent:true,email_id:emailDelivery?.id||null},200,request,env);
+    return response({ok:true,message:"A new verification email has been sent.",email_sent:true,email_id:emailDelivery?.id||null,email_from:emailDelivery?.from||null},200,request,env);
   }catch(err){
     console.error("resend verification:",err);
     return response({error:"We could not send the verification email right now. Please try again shortly."},503,request,env);
@@ -187,7 +187,7 @@ async function signup(request,env){
       return response({error:"Account created, but the verification email could not be sent yet. Please use RESEND VERIFICATION.",email,verification_required:true,email_sent:false},503,request,env);
     }
 
-    return response({ok:true,email,verification_required:true,email_sent:true,email_id:emailDelivery?.id||null},201,request,env);
+    return response({ok:true,email,verification_required:true,email_sent:true,email_id:emailDelivery?.id||null,email_from:emailDelivery?.from||null},201,request,env);
   }catch(err){
     console.error("signup stage:",stage,err);
     return response({error:"Signup failed.",stage,detail:String(err?.message||err||"unknown error")},500,request,env);
