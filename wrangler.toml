@@ -9,3 +9,8 @@ ALLOWED_ORIGIN = "https://tori.dewify.shop"
 binding = "DB"
 database_name = "replyflix"
 database_id = "d7fef1fc-b642-485c-b9d7-13ace667f845"
+
+[assets]
+directory = "."
+binding = "ASSETS"
+run_worker_first = ["/api/*"]
