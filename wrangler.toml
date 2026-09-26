@@ -20,5 +20,4 @@ pattern = "api.replyflix.dewify.shop"
 custom_domain = true
 
 [[routes]]
-pattern = "replyflix.dewify.shop"
-custom_domain = true
+pattern = "replyflix.dewify.shop/automation/*"
