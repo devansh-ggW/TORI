@@ -4,7 +4,9 @@ const PBKDF2_ITERATIONS=100000;
 
 function corsHeaders(request,env){
   const origin=request.headers.get("Origin")||"";
-  const allowed=env.ALLOWED_ORIGIN||origin;
+  const configured=String(env.ALLOWED_ORIGIN||"").replace(/\\/+$/,"");
+  const allowedOrigins=new Set([configured,"https://tori.dewify.shop","https://replyflix.dewify.shop"].filter(Boolean));
+  const allowed=allowedOrigins.has(origin)?origin:(configured||origin);
   return {
     "access-control-allow-origin":allowed,
     "access-control-allow-credentials":"true",
