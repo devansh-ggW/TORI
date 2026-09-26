@@ -427,3 +427,77 @@ function initTheme(){
   btn.addEventListener('click',transition);
   apply();
 }
+
+function profileInitial(user){
+  const name=String(user?.full_name||user?.email||"R").trim();
+  return (name[0]||"R").toUpperCase();
+}
+function renderSiteAuth(access){
+  const actions=document.querySelector(".actions");
+  if(!actions)return;
+  let auth=document.querySelector(".siteAuth");
+  if(!auth){
+    auth=document.createElement("div");
+    auth.className="siteAuth";
+    actions.appendChild(auth);
+  }
+  auth.innerHTML="";
+  const user=access?.user;
+  if(user){
+    const link=document.createElement("a");
+    link.className="profileMini";
+    link.href="profile.html";
+    link.title="Open profile";
+    const pic=document.createElement("span");
+    pic.className="profileMiniImage";
+    const avatar=access?.profile?.avatar_data_url;
+    if(avatar){
+      const img=document.createElement("img");
+      img.src=avatar;
+      img.alt="Profile picture";
+      pic.appendChild(img);
+    }else{
+      const fallback=document.createElement("span");
+      fallback.className="profileMiniFallback";
+      fallback.textContent=profileInitial(user);
+      pic.appendChild(fallback);
+    }
+    link.appendChild(pic);
+    const btn=document.createElement("span");
+    btn.className="btn dark profileMiniButton";
+    btn.textContent="PROFILE";
+    link.appendChild(btn);
+    auth.appendChild(link);
+    return;
+  }
+  const signIn=document.createElement("a");
+  signIn.className="btn dark";
+  signIn.href="auth.html?mode=signin";
+  signIn.textContent="SIGN IN";
+  const signUp=document.createElement("a");
+  signUp.className="btn";
+  signUp.href="auth.html?mode=signup";
+  signUp.textContent="SIGN UP";
+  auth.append(signIn,signUp);
+}
+async function initSiteAuth(){
+  renderSiteAuth(null);
+  try{
+    const data=await apiFetch("/auth/me");
+    const access={user:data.user,profile:data.profile};
+    window.__REPLYFLIX_ACCESS=access;
+    renderSiteAuth(access);
+  }catch{
+    window.__REPLYFLIX_ACCESS=null;
+    renderSiteAuth(null);
+  }
+  window.addEventListener("replyflix:auth-changed",()=>{
+    const access=window.__REPLYFLIX_ACCESS;
+    renderSiteAuth(access);
+  });
+}
+document.addEventListener("DOMContentLoaded",()=>{
+  initTheme();
+  initAuth();
+  initSiteAuth();
+});
