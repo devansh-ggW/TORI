@@ -96,6 +96,8 @@ async function sendVerificationEmail(env,request,user,token){
     try{const body=await res.json();detail=body?.message||body?.error||detail}catch{}
     throw new Error(detail);
   }
+  const body=await res.json();
+  return {id:body?.id||null};
 }
 
 async function issueVerificationToken(env,request,user){
@@ -103,7 +105,7 @@ async function issueVerificationToken(env,request,user){
   const tokenHash=b64url(await sha256(token));
   const expires=new Date(Date.now()+24*60*60*1000).toISOString();
   await env.DB.prepare("UPDATE users SET email_verification_token_hash=?,email_verification_expires_at=?,email_verification_sent_at=?,updated_at=? WHERE id=?").bind(tokenHash,expires,now(),now(),user.id).run();
-  await sendVerificationEmail(env,request,user,token);
+  return await sendVerificationEmail(env,request,user,token);
 }
 
 async function verifyEmail(request,env){
@@ -135,8 +137,8 @@ async function resendVerification(request,env){
   if(Number.isFinite(sentAt)&&Date.now()-sentAt<60000)return response({error:"Please wait a minute before requesting another verification email."},429,request,env);
 
   try{
-    await issueVerificationToken(env,request,user);
-    return response({ok:true,message:"A new verification email has been sent."},200,request,env);
+    const emailDelivery=await issueVerificationToken(env,request,user);
+    return response({ok:true,message:"A new verification email has been sent.",email_sent:true,email_id:emailDelivery?.id||null},200,request,env);
   }catch(err){
     console.error("resend verification:",err);
     return response({error:"We could not send the verification email right now. Please try again shortly."},503,request,env);
@@ -176,14 +178,15 @@ async function signup(request,env){
     ]);
 
     stage="send-verification";
+    let emailDelivery;
     try{
-      await sendVerificationEmail(env,request,{id,email,fullName},verificationToken);
+      emailDelivery=await sendVerificationEmail(env,request,{id,email,fullName},verificationToken);
     }catch(err){
       console.error("verification email:",err);
-      return response({error:"Account created, but the verification email could not be sent yet. Please use RESEND VERIFICATION.",email,verification_required:true},503,request,env);
+      return response({error:"Account created, but the verification email could not be sent yet. Please use RESEND VERIFICATION.",email,verification_required:true,email_sent:false},503,request,env);
     }
 
-    return response({ok:true,email,verification_required:true},201,request,env);
+    return response({ok:true,email,verification_required:true,email_sent:true,email_id:emailDelivery?.id||null},201,request,env);
   }catch(err){
     console.error("signup stage:",stage,err);
     return response({error:"Signup failed.",stage,detail:String(err?.message||err||"unknown error")},500,request,env);
