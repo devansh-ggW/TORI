@@ -8,7 +8,7 @@ function corsHeaders(request,env){
   return {
     "access-control-allow-origin":allowed,
     "access-control-allow-credentials":"true",
-    "access-control-allow-methods":"GET,POST,PUT,PATCH,OPTIONS",
+    "access-control-allow-methods":"GET,POST,PUT,PATCH,DELETE,OPTIONS",
     "access-control-allow-headers":"Content-Type, Authorization",
     "vary":"Origin"
   };
@@ -218,6 +218,27 @@ async function authSmoke(request,env){
   },200,request,env);
 }
 
+
+async function deleteAccount(request,env){
+  const a=await access(request,env);
+  if(!a)return response({error:"Unauthorized."},401,request,env);
+  const p=await jsonBody(request);
+  const password=String(p.password||"");
+  const confirmation=String(p.confirmation||"");
+  if(confirmation!=="DELETE MY ACCOUNT")return response({error:'Type "DELETE MY ACCOUNT" to confirm account deletion.'},400,request,env);
+  if(!password)return response({error:"Enter your current password to delete the account."},400,request,env);
+  const u=await env.DB.prepare("SELECT password_hash,password_salt FROM users WHERE id=?").bind(a.user.id).first();
+  if(!u||!(await verifyPassword(password,u.password_salt,u.password_hash)))return response({error:"Current password is incorrect."},401,request,env);
+  const uid=a.user.id;
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM messages WHERE user_id=?").bind(uid),
+    env.DB.prepare("DELETE FROM sessions WHERE user_id=?").bind(uid),
+    env.DB.prepare("DELETE FROM profiles WHERE user_id=?").bind(uid),
+    env.DB.prepare("DELETE FROM users WHERE id=?").bind(uid)
+  ]);
+  return response({ok:true},200,request,env,{"set-cookie":clearCookie()});
+}
+
 async function changePassword(request,env){
   const a=await access(request,env);if(!a)return response({error:"Unauthorized."},401,request,env);
   const p=await jsonBody(request),current=String(p.current_password||""),next=String(p.new_password||"");
@@ -242,6 +263,7 @@ export default {async fetch(request,env){
     if(path==="/api/auth/signout"&&request.method==="POST")return signout(request,env);
     if(path==="/api/auth/me"&&request.method==="GET")return me(request,env);
     if(path==="/api/auth/change-password"&&request.method==="POST")return changePassword(request,env);
+    if(path==="/api/account"&&request.method==="DELETE")return deleteAccount(request,env);
     if(path==="/api/profile"&&(request.method==="GET"||request.method==="PUT"))return profile(request,env);
     if(path==="/api/messages"&&(request.method==="GET"||request.method==="POST"))return messages(request,env);
     if(path.startsWith("/api/messages/")&&request.method==="PATCH")return messagePatch(request,env,path.slice(14));
