@@ -66,3 +66,9 @@ html.theme-changing *,html.theme-changing *::before,html.theme-changing *::after
   .themeTransitionOverlay{display:none!important}
   .themeToggle{transition:none!important}
 }
+.verificationState{display:grid;gap:10px;padding:2px 0}
+.verificationState h2{margin:0;font-size:28px;letter-spacing:-.04em}
+.verificationState .field{margin:2px 0}
+.dangerButton{background:#dc2626!important;border-color:#dc2626!important;color:#fff!important;box-shadow:0 8px 22px rgba(220,38,38,.16)!important}
+.dangerButton:hover{background:#b91c1c!important;border-color:#b91c1c!important;transform:translateY(-1px)}
+.dangerButton:disabled{opacity:.55!important;cursor:not-allowed;transform:none!important}
