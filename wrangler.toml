@@ -1,0 +1,11 @@
+name = "replyflix-api"
+main = "worker.js"
+compatibility_date = "2026-09-26"
+
+[vars]
+ALLOWED_ORIGIN = "https://tori.dewify.shop"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "replyflix"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
