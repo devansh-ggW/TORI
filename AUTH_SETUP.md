@@ -26,7 +26,7 @@ The frontend uses `/api` by default. Route the Worker on the same ReplyFlix host
 
 Email/password sign-up and sign-in, 18+ validation, email verification through Resend, PBKDF2 password hashing using Workers Web Crypto, secure sessions, business profile/knowledge persistence, channel-link persistence, message storage/review/reply/ignore, plan limits, password change, and account deletion are implemented.
 
-Email verification sends through Resend. Configure the Worker secret `RESEND_API_KEY`; optionally set `RESEND_FROM` (otherwise `ReplyFlix <noreply@tori.dewify.shop>` is used). The sending domain/address must be configured in Resend. Password-reset email delivery is not yet implemented.
+Email verification sends through Resend. Configure the Worker secrets `RESEND_API_KEY` and `RESEND_FROM`. `RESEND_FROM` must be an address on a domain verified in Resend (for example `ReplyFlix <noreply@your-verified-domain.com>`). The sending domain/address must be configured in Resend. Password-reset email delivery is not yet implemented.
 
 ## Production
 
