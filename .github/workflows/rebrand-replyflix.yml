@@ -1,0 +1,45 @@
+name: Rebrand ReplyFlix
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  rebrand:
+    if: ${{ !startsWith(github.event.head_commit.message, 'chore: rebrand ReplyFlix') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rebrand site and apply ReplyFlix theme
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          for p in Path('.').rglob('*'):
+              if not p.is_file() or '.git' in p.parts:
+                  continue
+              if p.suffix.lower() not in {'.html','.css','.js','.md','.txt'}:
+                  continue
+              try:
+                  s=p.read_text(encoding='utf-8')
+              except Exception:
+                  continue
+              original=s
+              s=s.replace('TORI', 'ReplyFlix').replace('tori', 'replyflix')
+              s=s.replace('icon.png', 'replyflix-icon.svg').replace('icon.ico', 'replyflix-icon.svg')
+              if p.name == 'styles.css':
+                  s=s.replace(':root{--bg:#f5f6f7;--surface:#fff;--surface2:#fafbfc;--line:#e5e7eb;--line2:#d7dbe0;--text:#111318;--soft:#4b5563;--muted:#737b87;--faint:#9aa2ad;--ink:#111318;--green:#147a4b;--green-bg:#eaf8f0;--red:#b42318;--red-bg:#fff0ef;--amber:#9a6700;--amber-bg:#fff7df;--blue:#315efb;--blue-bg:#eef2ff;', ':root{--bg:#f3f0e8;--surface:#fcfaf5;--surface2:#f7f4ec;--line:#e4e0d6;--line2:#d4d0c5;--text:#172033;--soft:#536074;--muted:#748097;--faint:#9aa4b4;--ink:#172033;--green:#147a4b;--green-bg:#eaf8f0;--red:#b42318;--red-bg:#fff0ef;--amber:#9a6700;--amber-bg:#fff7df;--blue:#2f6ff2;--blue-bg:#eaf1ff;')
+                  s=s.replace('header{position:sticky;top:0;z-index:40;background:rgba(255,255,255,.94);','header{position:sticky;top:0;z-index:40;background:rgba(252,250,245,.94);')
+                  s=s.replace('.btn.amber{background:#f3c64f;border-color:#e5b536;color:#111318}', '.btn.amber{background:var(--blue);border-color:var(--blue);color:#fff}')
+                  s=s.replace('.outline{color:transparent;-webkit-text-stroke:1px #8e96a1}', '.outline{color:transparent;-webkit-text-stroke:1px var(--blue)}')
+                  s=s.replace('.kickerLine i{width:16px;height:2px;background:#111318;', '.kickerLine i{width:16px;height:2px;background:var(--blue);')
+                  s=s.replace('::selection{background:#111318;color:#fff}', '::selection{background:var(--blue);color:#fff}')
+              if s != original:
+                  p.write_text(s, encoding='utf-8')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m 'chore: rebrand ReplyFlix website'
+          git push
