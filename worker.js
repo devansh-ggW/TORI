@@ -159,11 +159,17 @@ async function profile(request,env){
     if(avatar && !/^data:image\/(png|jpe?g|webp);base64,/i.test(avatar))return response({error:"Profile picture must be a PNG, JPEG, or WebP image."},400,request,env);
     sets.push("avatar_data_url=?");vals.push(avatar||null);
   }
+  if(Object.hasOwn(p,"full_name")){
+    const fullName=String(p.full_name||"").trim();
+    if(!fullName||fullName.length>120)return response({error:"Enter a valid display name."},400,request,env);
+    await env.DB.prepare("UPDATE users SET full_name=?,updated_at=? WHERE id=?").bind(fullName,now(),a.user.id).run();
+  }
   if(!sets.length)return response({profile:a.profile},200,request,env);
   sets.push("updated_at=?");vals.push(now(),a.user.id);
   await env.DB.prepare("UPDATE profiles SET "+sets.join(",")+" WHERE user_id=?").bind(...vals).run();
   const r=await env.DB.prepare("SELECT * FROM profiles WHERE user_id=?").bind(a.user.id).first();
-  return response({profile:profileOut(r)},200,request,env);
+  const user=await env.DB.prepare("SELECT id,email,full_name,date_of_birth,age_verified,created_at FROM users WHERE id=?").bind(a.user.id).first();
+  return response({profile:profileOut(r),user:user?{id:user.id,email:user.email,full_name:user.full_name,date_of_birth:user.date_of_birth,age_verified:!!user.age_verified,created_at:user.created_at}:null},200,request,env);
 }
 async function messages(request,env){
   const a=await access(request,env);if(!a)return response({error:"Unauthorized."},401,request,env);
