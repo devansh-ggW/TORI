@@ -364,129 +364,66 @@ function initTheme(){
     }
     field.appendChild(frag);document.body.prepend(field);
   }
+
   let theme=localStorage.getItem(THEME_KEY)||'light';
   if(theme!=='dark'&&theme!=='light')theme='light';
+
+  let overlay=document.querySelector('.themeTransitionOverlay');
+  if(!overlay){
+    overlay=document.createElement('div');
+    overlay.className='themeTransitionOverlay';
+    overlay.setAttribute('aria-hidden','true');
+    overlay.innerHTML='<div class="themeShockwave"></div><div class="themeArmorGrid"></div><div class="themeClawSweep"></div><div class="themeCoreGlow"></div>';
+    document.body.appendChild(overlay);
+  }
+
   const apply=()=>{
     root.dataset.theme=theme;
     const btn=document.querySelector('[data-theme-toggle]');
-    if(btn){const dark=theme==='dark';const icon=btn.querySelector('.themeIcon');if(icon)icon.textContent=dark?'☀':'☾';btn.title=dark?'Switch to light mode':'Switch to dark mode';btn.setAttribute('aria-label',btn.title);}
+    if(btn){
+      const dark=theme==='dark';
+      const icon=btn.querySelector('.themeIcon');
+      if(icon)icon.textContent=dark?'☀':'☾';
+      btn.title=dark?'Switch to light mode':'Switch to dark mode';
+      btn.setAttribute('aria-label',btn.title);
+    }
   };
+
   let btn=document.querySelector('[data-theme-toggle]');
   if(!btn){
     const actions=document.querySelector('.actions');
     if(actions){
-      btn=document.createElement('button');btn.type='button';btn.className='themeToggle';btn.setAttribute('data-theme-toggle','true');
+      btn=document.createElement('button');
+      btn.type='button';
+      btn.className='themeToggle';
+      btn.setAttribute('data-theme-toggle','true');
       btn.innerHTML='<span class="themeIcon" aria-hidden="true">☾</span>';
-      const menu=actions.querySelector('#menu');if(menu)actions.insertBefore(btn,menu);else actions.appendChild(btn);
-      btn.addEventListener('click',()=>{theme=theme==='dark'?'light':'dark';localStorage.setItem(THEME_KEY,theme);apply();});
+      actions.insertBefore(btn,actions.firstChild);
     }
   }
+
+  let changing=false;
+  const transition=()=>{
+    if(changing)return;
+    changing=true;
+    const next=theme==='dark'?'light':'dark';
+    overlay.classList.remove('run','to-dark','to-light');
+    void overlay.offsetWidth;
+    overlay.style.setProperty('--theme-x',((btn?.getBoundingClientRect().left||20)+(btn?.offsetWidth||40)/2)+'px');
+    overlay.style.setProperty('--theme-y',((btn?.getBoundingClientRect().top||20)+(btn?.offsetHeight||40)/2)+'px');
+    overlay.classList.add('run',next==='dark'?'to-dark':'to-light');
+    const switchAt=240;
+    const finishAt=720;
+    setTimeout(()=>{
+      theme=next;
+      localStorage.setItem(THEME_KEY,theme);
+      apply();
+    },switchAt);
+    setTimeout(()=>{
+      overlay.classList.remove('run','to-dark','to-light');
+      changing=false;
+    },finishAt);
+  };
+  btn.addEventListener('click',transition);
   apply();
 }
-
-function initSourceConnectors(accessArg){
-  if(!$('messageList'))return;
-  const access=accessArg||window.__REPLYFLIX_ACCESS;if(!access)return;
-  const labels={whatsapp:'WhatsApp Business',instagram:'Instagram',messenger:'Messenger',telegram:'Telegram',email:'Email',website:'Website'};
-  let integrations=access.profile?.integrations&&typeof access.profile.integrations==='object'?access.profile.integrations:{};
-  const validLink=(source,value)=>{try{const u=new URL(value);if(u.protocol!=='https:'&&u.protocol!=='http:')return false;if(source==='whatsapp')return /(^|\\.)wa\\.me$|(^|\\.)whatsapp\\.com$/i.test(u.hostname);if(source==='instagram')return /(^|\\.)instagram\\.com$/i.test(u.hostname);return true}catch{return false}};
-  const saveIntegrations=async next=>{try{await apiFetch('/profile',{method:'PUT',body:JSON.stringify({integrations:next})});integrations=next;access.profile.integrations=next;return true}catch(e){toast(e.message||'Could not save connection.');return false}};
-  let modal=document.querySelector('.connectorModal');
-  if(!modal){
-    modal=document.createElement('div');modal.className='connectorModal';modal.hidden=true;
-    modal.innerHTML='<div class="connectorDialog" role="dialog" aria-modal="true" aria-labelledby="connectorTitle"><div class="connectorDialogHead"><div><div class="kicker">ReplyFlix / CONNECTION</div><h3 id="connectorTitle">CONNECT CHANNEL</h3></div><button class="connectorClose" id="connectorClose" type="button" aria-label="Close">×</button></div><p id="connectorCopy"></p><div class="connectorOption"><strong>Provider authorization</strong><span id="connectorAuthStatus">Provider authorization is not configured yet.</span><div class="connectorActions"><button class="btn" id="connectorAuthorize" type="button" disabled>AUTHORIZE · SETUP REQUIRED</button></div></div><div class="connectorOption"><strong>Direct business link</strong><span>Save the public link you want ReplyFlix to open for this channel.</span><input class="connectLinkInput" id="connectorLink" type="url" placeholder="https://…"><div class="connectorActions"><button class="btn dark" id="connectorSaveLink" type="button">SAVE LINK</button><button class="btn dark" id="connectorOpenLink" type="button" hidden>OPEN LINK</button></div><div class="connectHint" id="connectorHint">Use a secure HTTPS link from the official platform.</div></div></div>';
-    document.body.appendChild(modal);modal.addEventListener('click',e=>{if(e.target===modal)modal.hidden=true});document.getElementById('connectorClose')?.addEventListener('click',()=>{modal.hidden=true});
-  }
-  document.querySelectorAll('[data-source]').forEach(b=>b.addEventListener('click',()=>{const active=b.dataset.source,item=integrations[active]||{};document.getElementById('connectorTitle').textContent='CONNECT '+(labels[active]||active).toUpperCase();document.getElementById('connectorCopy').textContent='Save the business link now; provider API connectors can be added later.';document.getElementById('connectorLink').value=item.link||'';document.getElementById('connectorOpenLink').hidden=!item.link;modal.hidden=false;document.getElementById('connectorSaveLink').onclick=async()=>{const value=document.getElementById('connectorLink').value.trim();if(!validLink(active,value)){toast('Enter a valid platform link.');return}const next={...integrations,[active]:{link:value,linkedAt:new Date().toISOString(),mode:'link'}};if(await saveIntegrations(next)){document.getElementById('connectorOpenLink').hidden=false;toast((labels[active]||active)+' link saved.')}};document.getElementById('connectorOpenLink').onclick=()=>{const v=integrations[active]?.link;if(v)window.open(v,'_blank','noopener,noreferrer')}}));
-}
-function initProtectedPage(){
-  if(document.body?.dataset.protected!=="true")return;
-  ensureReplyFlixAccess(true).then(async x=>{
-    if(x?.profile?.knowledge&&typeof x.profile.knowledge==="object"&&Object.keys(x.profile.knowledge).length){K=normalizePack(x.profile.knowledge);localStorage.setItem(STORE,JSON.stringify(K));render();}
-  });
-}
-async function initMessages(){
-  if(!$("messageList")||document.body?.dataset.protected!=="true")return;
-  const access=window.__REPLYFLIX_ACCESS||await ensureReplyFlixAccess(true);if(!access)return;
-  const state={messages:[],selected:null,filter:"all",profile:access.profile};
-  if(state.profile?.knowledge&&typeof state.profile.knowledge==="object"&&Object.keys(state.profile.knowledge).length){K=normalizePack(state.profile.knowledge);localStorage.setItem(STORE,JSON.stringify(K))}
-  const limits=p=>p==="premium"?100:p==="pro"?25:5;
-  const label=s=>({whatsapp:"WHATSAPP",instagram:"INSTAGRAM",messenger:"MESSENGER",telegram:"TELEGRAM",email:"EMAIL",website:"WEBSITE",manual:"MANUAL"}[s]||String(s||"SOURCE").toUpperCase());
-  const fmt=v=>{try{return new Intl.DateTimeFormat(undefined,{dateStyle:"medium",timeStyle:"short"}).format(new Date(v))}catch{return String(v||"")}};
-  const txt=(id,v)=>{const e=$(id);if(e)e.textContent=v};
-  const updateToggle=enabled=>{const n=document.querySelector(".toggleRow .smallNote");if(n)n.textContent=enabled?"Auto replies only run for confident, grounded answers. Turn this off anytime.":"Auto reply is OFF. Messages stay in review until you reply manually."};
-  const analyzeMsg=m=>{try{return analyze(m.body)}catch{return{confidence:0,status:"neutral",response:"",missing:["analysis"],intents:[]}}};
-  const load=async()=>{try{const r=await apiFetch('/messages');state.messages=r.messages||[];txt("storedCount",state.messages.length+" / "+limits(state.profile?.plan));txt("replyCount",state.messages.filter(x=>["auto_replied","manual_reply"].includes(x.status)).length+" / "+limits(state.profile?.plan));txt("planName",(state.profile?.plan||"free").toUpperCase());renderList();renderDetail()}catch(e){toast(e.message||"Could not load messages.")}};
-  const visible=()=>state.filter==="all"?state.messages:state.messages.filter(x=>x.status===state.filter);
-  const renderList=()=>{const list=$("messageList"),items=visible();txt("inboxCount",items.length);if(!items.length){list.innerHTML='<div class="emptyState">No messages in this view.</div>';return}list.innerHTML=items.map(x=>{const tag=x.status==="review"?'<span class="tag red">REVIEW</span>':x.status==="auto_replied"?'<span class="tag green">AUTO-REPLIED</span>':x.status==="manual_reply"?'<span class="tag green">REPLIED</span>':'<span class="tag gray">'+esc(String(x.status||"OPEN").toUpperCase())+'</span>';return '<div class="messageItem'+(state.selected===x.id?" active":"")+'" data-message-id="'+esc(x.id)+'"><div class="messageItemTop"><div class="messageSender">'+esc(x.sender_name||x.sender_handle||"Customer")+'</div><div class="messageTime">'+esc(fmt(x.received_at))+'</div></div><div class="messagePreview">'+esc(x.body)+'</div><div class="tagRow"><span class="tag gray">'+esc(label(x.source))+'</span>'+tag+'</div></div>'}).join("");list.querySelectorAll("[data-message-id]").forEach(el=>el.onclick=()=>{state.selected=el.dataset.messageId;renderList();renderDetail()})};
-  const renderDetail=()=>{const box=$("detailBody"),m=state.messages.find(x=>x.id===state.selected);if(!m){txt("detailTitle","SELECT A MESSAGE");txt("detailStatus","—");box.innerHTML='<div class="emptyState">Select a message from the inbox to review it.</div>';return}txt("detailTitle",m.sender_name||m.sender_handle||"Customer");txt("detailStatus",label(m.source)+" · "+String(m.status||"OPEN").toUpperCase());const a=analyzeMsg(m),tag=m.status==="review"?'<span class="tag red">RED · REVIEW REQUIRED</span>':m.status==="auto_replied"?'<span class="tag green">AUTO-REPLIED</span>':'<span class="tag gray">'+esc(String(m.status||"OPEN").toUpperCase())+'</span>';box.innerHTML='<div class="messageMeta"><span>'+esc(label(m.source))+'</span><span>'+esc(fmt(m.received_at))+'</span><span>BUSINESS '+Number(m.relevance_confidence||0)+'%</span><span>REPLY '+Number(a.confidence||m.reply_confidence||0)+'%</span></div><div class="tagRow">'+tag+'</div><div class="messageBody">'+esc(m.body)+'</div><div class="replyBox"><div class="field"><label>REPLYFLIX RESPONSE</label><textarea id="replyDraft" placeholder="Write a response or use ReplyFlix draft.">'+esc(m.reply_text||a.response||"")+'</textarea></div><div class="replyActions"><button class="btn" id="sendManualReply">MARK REPLIED</button><button class="btn dark" id="useToriDraft">USE REPLYFLIX DRAFT</button><button class="mini" id="ignoreMessage">IGNORE</button></div><div class="helper">'+(a.status==="good"?"ReplyFlix has enough configured facts for a grounded draft.":"ReplyFlix is not confident enough to auto-answer this message; review it before sending.")+'</div></div>';$("useToriDraft")?.addEventListener("click",()=>{$("replyDraft").value=a.response||""});$("ignoreMessage")?.addEventListener("click",async()=>{try{await apiFetch('/messages/'+encodeURIComponent(m.id),{method:'PATCH',body:JSON.stringify({status:"ignored"})});m.status="ignored";renderList();renderDetail();toast("Message moved out of the active inbox.")}catch(e){toast(e.message)}});$("sendManualReply")?.addEventListener("click",async()=>{const t=$("replyDraft").value.trim();if(!t){toast("Write a reply first.");return}try{const r=await apiFetch('/messages/'+encodeURIComponent(m.id),{method:'PATCH',body:JSON.stringify({status:"manual_reply",reply_text:t})});Object.assign(m,r.message);renderList();renderDetail();toast("Reply recorded. A live channel connector is required to dispatch it externally.")}catch(e){toast(e.message||"Could not save reply.")}})};
-  const maybeAutoReply=async()=>{if(!state.profile?.auto_reply_enabled)return;const pending=state.messages.filter(x=>x.business_related&&x.status==="review"&&x.source==="manual");for(const m of pending){const a=analyzeMsg(m);if(a.status!=="good"||!a.response||a.missing.length)continue;try{const r=await apiFetch('/messages/'+encodeURIComponent(m.id),{method:'PATCH',body:JSON.stringify({status:"auto_replied",reply_text:a.response})});if(r?.message)Object.assign(m,r.message)}catch{}}};
-  document.querySelectorAll("[data-filter]").forEach(b=>b.addEventListener("click",()=>{state.filter=b.dataset.filter;document.querySelectorAll("[data-filter]").forEach(x=>x.classList.toggle("active",x===b));renderList()}));
-  $("refreshMessages")?.addEventListener("click",async()=>{await load();await maybeAutoReply();await load();toast("Inbox refreshed.")});
-  $("autoReplyToggle")?.addEventListener("change",async e=>{const enabled=e.target.checked;try{await apiFetch('/profile',{method:'PUT',body:JSON.stringify({auto_reply_enabled:enabled})});state.profile.auto_reply_enabled=enabled;updateToggle(enabled);toast(enabled?"Auto reply enabled.":"Auto reply disabled.")}catch(err){e.target.checked=!enabled;toast(err.message)}});
-  $("addManualMessage")?.addEventListener("click",async()=>{const body=$("manualMessage")?.value.trim()||"",source=$("manualSource")?.value||"manual",sender=$("manualSender")?.value.trim()||"Customer";if(!body){toast("Enter a customer message first.");return}const a=analyzeMsg({body});if(a.confidence<40||!a.intents?.length){toast("ReplyFlix kept this out: it does not look sufficiently business-related.");return}const auto=state.profile.auto_reply_enabled&&a.status==="good"&&!a.missing.length&&source==="manual";try{const r=await apiFetch('/messages',{method:'POST',body:JSON.stringify({source,body,sender_name:sender,received_at:new Date().toISOString(),business_related:true,relevance_confidence:Math.max(40,a.confidence),reply_confidence:a.confidence,status:auto?"auto_replied":"review",reply_text:auto?a.response:null,metadata:{test:true,analysis_status:a.status,dispatch:"manual_test"}})});state.selected=r.message?.id||null;$("manualMessage").value="";$("manualSender").value="";await load();toast(auto?"Business message stored and auto-reply simulated for the local test flow.":"Business message stored for review.")}catch(e){toast(e.message||"Could not store message.")}});
-  initSourceConnectors(access);
-  $("autoReplyToggle").checked=!!state.profile?.auto_reply_enabled;updateToggle(!!state.profile?.auto_reply_enabled);
-  await load();await maybeAutoReply();await load();
-}
-
-
-function initSiteAuthControls(){
-  const actions=document.querySelector(".actions");if(!actions)return;
-  const menu=document.querySelector("#menu");
-  let box=actions.querySelector("[data-auth-actions]");
-  if(!box){
-    box=document.createElement("div");
-    box.className="authActions";
-    box.setAttribute("data-auth-actions","");
-    const old=[...actions.querySelectorAll('a[href^="auth.html"]')];
-    old.forEach(x=>x.remove());
-    const accountLink=actions.querySelector('a[href="auth.html"]');
-    if(accountLink)accountLink.remove();
-    if(menu)actions.insertBefore(box,menu);else actions.appendChild(box);
-  }
-  const render=authenticated=>{
-    if(authenticated){
-      const avatar=window.__REPLYFLIX_ACCESS?.profile?.avatar_data_url||"";
-      box.innerHTML='<a class="profileMini" href="profile.html" aria-label="Profile"><span class="profileMiniImage">'+(avatar?'<img src="'+avatar+'" alt="">':'<span class="profileMiniFallback">R</span>')+'</span><span class="btn dark profileMiniButton">PROFILE</span></a>';
-    }else{
-      box.innerHTML='<a class="btn dark" href="auth.html?mode=signin">SIGN IN</a><a class="btn" href="auth.html?mode=signup">SIGN UP</a>';
-    }
-  };
-  render(!!window.__REPLYFLIX_ACCESS?.user);
-  const sync=async()=>{
-    try{const data=await apiFetch("/auth/me");window.__REPLYFLIX_ACCESS={user:data.user,profile:data.profile};render(true)}
-    catch{render(false)}
-  };
-  sync();
-  window.addEventListener("replyflix:auth-changed",e=>render(!!e.detail?.authenticated));
-  document.addEventListener("click",e=>{
-    const link=e.target.closest("a[href]");
-    if(!link)return;
-    if(link.target==="_blank")return;
-    const href=link.getAttribute("href");
-    if(!href||href.startsWith("#")||href.startsWith("mailto:")||href.startsWith("tel:"))return;
-    // Keep navigation reliable on the Cloudflare Worker static site.
-    if(/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(href))return;
-    e.preventDefault();
-    location.assign(href);
-  },true);
-}
-
-function init(){
-  document.querySelectorAll('[data-page]').forEach(a=>{if(a.getAttribute('href')===location.pathname.split('/').pop()||((!location.pathname.split('/').pop()||location.pathname.endsWith('/'))&&a.getAttribute('href')==='index.html'))a.classList.add('active')});
-  $('menu')?.addEventListener('click',()=>{const m=$('menu'),n=$('navlinks'),open=n.classList.toggle('open');m.setAttribute('aria-expanded',String(open));});
-  document.querySelectorAll('.navlinks a').forEach(a=>a.addEventListener('click',()=>{$('navlinks').classList.remove('open');$('menu')?.setAttribute('aria-expanded','false')}));document.addEventListener('click',e=>{const n=$('navlinks'),m=$('menu');if(n?.classList.contains('open')&&!n.contains(e.target)&&!m?.contains(e.target)){n.classList.remove('open');m?.setAttribute('aria-expanded','false')}});
-  document.querySelectorAll('[data-toast]').forEach(b=>b.addEventListener('click',()=>toast(b.dataset.toast)));
-  if($('savePack'))$('savePack').onclick=()=>{readProfile();save();toast('Knowledge pack saved locally.')};
-  if($('clearPack'))$('clearPack').onclick=clearPack;if($('addProduct'))$('addProduct').onclick=addProduct;if($('addService'))$('addService').onclick=addService;if($('addFact'))$('addFact').onclick=addFact;if($('addKeyword'))$('addKeyword').onclick=addKeyword;
-  if($('analyze'))$('analyze').onclick=runAnalysis;if($('teach'))$('teach').onclick=teach;
-  document.querySelectorAll('[data-example]').forEach(b=>b.onclick=()=>setExample(b.dataset.example));
-  if($('incoming'))$('incoming').addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter')runAnalysis()});
-  if($('exportPack'))$('exportPack').onclick=()=>{readProfile();const blob=new Blob([JSON.stringify(K,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='replyflix-knowledge.json';a.click();URL.revokeObjectURL(a.href);toast('Knowledge pack exported.')};
-  if($('importFile'))$('importFile').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const x=JSON.parse(rd.result);if(!x.business||typeof x.business!=='object')throw new Error('Invalid');K=normalizePack(x);save();render();toast('Knowledge pack imported.')}catch{toast('Invalid ReplyFlix knowledge file.')}};rd.readAsText(f)};
-  render();if($('incoming'))resetResult();
-  initTheme();initSiteAuthControls();initAuth();initProtectedPage();initMessages();
-}
-window.ReplyFlix={analyze,load:()=>K,save,normalize,INTENTS,apiFetch,reset:()=>{K=blank();save();return K}};
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
