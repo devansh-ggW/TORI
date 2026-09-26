@@ -166,7 +166,6 @@ async function signup(request,env){
     const id=uid(),t=now(),hp=await hashPassword(password);
 
     stage="create-account";
-    const id=uid(),t=now(),hp=await hashPassword(password);
     const verificationToken=b64url(randomBytes(32));
     const verificationHash=b64url(await sha256(verificationToken));
     const verificationExpires=new Date(Date.now()+24*60*60*1000).toISOString();
