@@ -24,10 +24,14 @@ The frontend uses `/api` by default. Route the Worker on the same ReplyFlix host
 
 ## Backend included
 
-Email/password sign-up and sign-in, 18+ validation, PBKDF2 password hashing using Workers Web Crypto, secure sessions, business profile/knowledge persistence, channel-link persistence, message storage/review/reply/ignore, plan limits, and password change are implemented.
+Email/password sign-up and sign-in, 18+ validation, email verification through Resend, PBKDF2 password hashing using Workers Web Crypto, secure sessions, business profile/knowledge persistence, channel-link persistence, message storage/review/reply/ignore, plan limits, password change, and account deletion are implemented.
 
-Password-reset email delivery is not faked. Add a transactional email provider before exposing a forgot-password flow.
+Email verification sends through Resend. Configure the Worker secret `RESEND_API_KEY`; optionally set `RESEND_FROM` (otherwise `ReplyFlix <noreply@tori.dewify.shop>` is used). The sending domain/address must be configured in Resend. Password-reset email delivery is not yet implemented.
 
 ## Production
 
 Set `ALLOWED_ORIGIN` to the actual frontend origin, configure the Worker route, replace the D1 database ID, fill legal placeholders, and document retention/deletion practices.
+
+## Database migration
+
+Apply `migrations/0002_email_verification.sql` to the remote D1 database before serving new signups. Existing users are preserved as verified; new signups are marked unverified until they click the email link.
