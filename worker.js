@@ -171,7 +171,8 @@ async function resendVerification(request,env){
   const email=String(p.email||"").trim().toLowerCase();
   if(!validEmail(email))return response({error:"Enter a valid email address."},400,request,env);
   const user=await env.DB.prepare("SELECT id,email,full_name,email_verified,email_verification_sent_at FROM users WHERE email=? LIMIT 1").bind(email).first();
-  if(!user||Number(user.email_verified)===1)return response({ok:true,message:"If that account needs verification, a new email has been sent."},200,request,env);
+  if(!user)return response({error:"No account was found for that email address."},404,request,env);
+  if(Number(user.email_verified)===1)return response({error:"This email is already verified. No verification email was sent.",email_verified:true,email_sent:false},409,request,env);
 
   const sentAt=Date.parse(String(user.email_verification_sent_at||""));
   if(Number.isFinite(sentAt)&&Date.now()-sentAt<60000)return response({error:"Please wait a minute before requesting another verification email."},429,request,env);
