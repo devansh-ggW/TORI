@@ -32,7 +32,7 @@ function clearCookie(){return COOKIE_NAME+"=; Path=/; HttpOnly; Secure; SameSite
 function parseJson(v,fallback={}){try{return v?JSON.parse(v):fallback}catch{return fallback}}
 function age(dob){const d=new Date(String(dob||"")+"T00:00:00");if(Number.isNaN(d.getTime()))return -1;const n=new Date();let a=n.getFullYear()-d.getFullYear();if(n.getMonth()<d.getMonth()||(n.getMonth()===d.getMonth()&&n.getDate()<d.getDate()))a--;return a}
 function validEmail(v){return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)}
-function profileOut(r){return{user_id:r.user_id,business_name:r.business_name||null,knowledge:parseJson(r.knowledge_json,{}),integrations:parseJson(r.integrations_json,{}),auto_reply_enabled:!!r.auto_reply_enabled,plan:r.plan||"free",created_at:r.created_at,updated_at:r.updated_at}}
+function profileOut(r){return{user_id:r.user_id,business_name:r.business_name||null,knowledge:parseJson(r.knowledge_json,{}),integrations:parseJson(r.integrations_json,{}),auto_reply_enabled:!!r.auto_reply_enabled,plan:r.plan||"free",avatar_data_url:r.avatar_data_url||null,created_at:r.created_at,updated_at:r.updated_at}}
 
 async function newSession(env,userId){
   const token=b64url(randomBytes(32));
@@ -47,7 +47,7 @@ async function access(request,env){
   const token=bearer||parseCookies(request)[COOKIE_NAME];
   if(!token)return null;
   const tokenHash=b64url(await sha256(token));
-  const row=await env.DB.prepare("SELECT u.*,p.business_name,p.knowledge_json,p.integrations_json,p.auto_reply_enabled,p.plan,p.created_at AS p_created_at,p.updated_at AS p_updated_at FROM sessions s JOIN users u ON u.id=s.user_id LEFT JOIN profiles p ON p.user_id=u.id WHERE s.token_hash=? AND s.expires_at>? LIMIT 1").bind(tokenHash,now()).first();
+  const row=await env.DB.prepare("SELECT u.*,p.business_name,p.knowledge_json,p.integrations_json,p.auto_reply_enabled,p.plan,p.created_at AS p_created_at,p.updated_at AS p_updated_at,p.avatar_data_url FROM sessions s JOIN users u ON u.id=s.user_id LEFT JOIN profiles p ON p.user_id=u.id WHERE s.token_hash=? AND s.expires_at>? LIMIT 1").bind(tokenHash,now()).first();
   if(!row)return null;
   return{
     user:{id:row.id,email:row.email,full_name:row.full_name,date_of_birth:row.date_of_birth,age_verified:!!row.age_verified,created_at:row.created_at},
@@ -60,13 +60,17 @@ async function ensureSchema(env){
   if(!env.DB)throw new Error("D1 binding DB is not configured.");
   await env.DB.batch([
     env.DB.prepare("CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY,email TEXT NOT NULL UNIQUE,password_hash TEXT NOT NULL,password_salt TEXT NOT NULL,full_name TEXT NOT NULL,date_of_birth TEXT NOT NULL,age_verified INTEGER NOT NULL DEFAULT 0,terms_accepted_at TEXT,terms_version TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL)"),
-    env.DB.prepare("CREATE TABLE IF NOT EXISTS profiles (user_id TEXT PRIMARY KEY,business_name TEXT,knowledge_json TEXT NOT NULL DEFAULT '{}',integrations_json TEXT NOT NULL DEFAULT '{}',auto_reply_enabled INTEGER NOT NULL DEFAULT 0,plan TEXT NOT NULL DEFAULT 'free',created_at TEXT NOT NULL,updated_at TEXT NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)"),
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS profiles (user_id TEXT PRIMARY KEY,business_name TEXT,avatar_data_url TEXT,knowledge_json TEXT NOT NULL DEFAULT '{}',integrations_json TEXT NOT NULL DEFAULT '{}',auto_reply_enabled INTEGER NOT NULL DEFAULT 0,plan TEXT NOT NULL DEFAULT 'free',created_at TEXT NOT NULL,updated_at TEXT NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)"),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY,user_id TEXT NOT NULL,expires_at TEXT NOT NULL,created_at TEXT NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)"),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,source TEXT NOT NULL,sender_name TEXT,sender_handle TEXT,body TEXT NOT NULL,received_at TEXT NOT NULL,business_related INTEGER NOT NULL DEFAULT 0,relevance_confidence INTEGER NOT NULL DEFAULT 0,reply_confidence INTEGER NOT NULL DEFAULT 0,status TEXT NOT NULL DEFAULT 'review',reply_text TEXT,metadata_json TEXT NOT NULL DEFAULT '{}',created_at TEXT NOT NULL,updated_at TEXT NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_messages_user_received ON messages(user_id,received_at DESC)")
   ]);
+  const profileColumns=await env.DB.prepare("PRAGMA table_info(profiles)").all();
+  if(!(profileColumns.results||[]).some(x=>x.name==="avatar_data_url")){
+    await env.DB.prepare("ALTER TABLE profiles ADD COLUMN avatar_data_url TEXT").run();
+  }
 }
 
 async function signup(request,env){
@@ -94,7 +98,7 @@ async function signup(request,env){
     stage="create-account";
     await env.DB.batch([
       env.DB.prepare("INSERT INTO users(id,email,password_hash,password_salt,full_name,date_of_birth,age_verified,terms_accepted_at,terms_version,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)").bind(id,email,hp.hash,hp.salt,fullName,dob,1,String(p.terms_accepted_at),String(p.terms_version||"2026-09-23"),t,t),
-      env.DB.prepare("INSERT INTO profiles(user_id,plan,auto_reply_enabled,knowledge_json,integrations_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?)").bind(id,"free",0,"{}","{}",t,t)
+      env.DB.prepare("INSERT INTO profiles(user_id,plan,auto_reply_enabled,knowledge_json,integrations_json,created_at,updated_at,avatar_data_url) VALUES(?,?,?,?,?,?,?,?)").bind(id,"free",0,"{}","{}",t,t,null)
     ]);
 
     stage="create-session";
@@ -149,6 +153,12 @@ async function profile(request,env){
   if(Object.hasOwn(p,"knowledge")){sets.push("knowledge_json=?");vals.push(JSON.stringify(p.knowledge||{}))}
   if(Object.hasOwn(p,"integrations")){sets.push("integrations_json=?");vals.push(JSON.stringify(p.integrations||{}))}
   if(Object.hasOwn(p,"auto_reply_enabled")){sets.push("auto_reply_enabled=?");vals.push(p.auto_reply_enabled?1:0)}
+  if(Object.hasOwn(p,"avatar_data_url")){
+    const avatar=String(p.avatar_data_url||"");
+    if(avatar.length>350000)return response({error:"Profile picture is too large. Please use a smaller image."},413,request,env);
+    if(avatar && !/^data:image\/(png|jpe?g|webp);base64,/i.test(avatar))return response({error:"Profile picture must be a PNG, JPEG, or WebP image."},400,request,env);
+    sets.push("avatar_data_url=?");vals.push(avatar||null);
+  }
   if(!sets.length)return response({profile:a.profile},200,request,env);
   sets.push("updated_at=?");vals.push(now(),a.user.id);
   await env.DB.prepare("UPDATE profiles SET "+sets.join(",")+" WHERE user_id=?").bind(...vals).run();
