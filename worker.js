@@ -51,7 +51,7 @@ async function access(request,env){
   if(!row)return null;
   return{
     user:{id:row.id,email:row.email,full_name:row.full_name,date_of_birth:row.date_of_birth,age_verified:!!row.age_verified,created_at:row.created_at},
-    profile:profileOut({user_id:row.id,business_name:row.business_name,knowledge_json:row.knowledge_json,integrations_json:row.integrations_json,auto_reply_enabled:row.auto_reply_enabled,plan:row.plan,created_at:row.p_created_at,updated_at:row.p_updated_at})
+    profile:profileOut({user_id:row.id,business_name:row.business_name,avatar_data_url:row.avatar_data_url,knowledge_json:row.knowledge_json,integrations_json:row.integrations_json,auto_reply_enabled:row.auto_reply_enabled,plan:row.plan,created_at:row.p_created_at,updated_at:row.p_updated_at})
   };
 }
 async function jsonBody(request){try{return await request.json()}catch{return{}}}
