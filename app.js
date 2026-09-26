@@ -482,7 +482,15 @@ function renderSiteAuth(access){
   auth.append(signIn,signUp);
 }
 async function initSiteAuth(){
-  renderSiteAuth(null);
+  const actions=document.querySelector(".actions");
+  let auth=document.querySelector(".siteAuth");
+  if(!auth&&actions){
+    auth=document.createElement("div");
+    auth.className="siteAuth";
+    auth.setAttribute("aria-hidden","true");
+    actions.appendChild(auth);
+  }
+  if(auth)auth.innerHTML="";
   try{
     const data=await apiFetch("/auth/me");
     const access={user:data.user,profile:data.profile};
@@ -492,9 +500,10 @@ async function initSiteAuth(){
     window.__REPLYFLIX_ACCESS=null;
     renderSiteAuth(null);
   }
+  auth=document.querySelector(".siteAuth");
+  if(auth)auth.removeAttribute("aria-hidden");
   window.addEventListener("replyflix:auth-changed",()=>{
-    const access=window.__REPLYFLIX_ACCESS;
-    renderSiteAuth(access);
+    renderSiteAuth(window.__REPLYFLIX_ACCESS);
   });
 }
 document.addEventListener("DOMContentLoaded",()=>{
