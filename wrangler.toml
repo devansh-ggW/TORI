@@ -8,4 +8,4 @@ ALLOWED_ORIGIN = "https://tori.dewify.shop"
 [[d1_databases]]
 binding = "DB"
 database_name = "replyflix"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+database_id = "d7fef1fc-b642-485c-b9d7-13ace667f845"
