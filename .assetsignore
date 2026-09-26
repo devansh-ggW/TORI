@@ -7,3 +7,5 @@ migrations/
 AUTH_SETUP.md
 CLOUDFLARE_SETUP.md
 README.md
+.wrangler/
+resend api key.txt
