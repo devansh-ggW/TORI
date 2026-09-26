@@ -59,7 +59,9 @@ async function apiFetch(path,options={}){
   if(options.body&&!(options.body instanceof FormData)&&!headers.has('content-type'))headers.set('content-type','application/json');
   const token=sessionToken();
   if(token&&!headers.has('authorization'))headers.set('authorization','Bearer '+token);
-  const res=await fetch(REPLYFLIX_API_BASE+path,{...options,headers,credentials:'include'});
+  const requestUrl=new URL(REPLYFLIX_API_BASE+path,location.href);
+  const sameOrigin=requestUrl.origin===location.origin;
+  const res=await fetch(requestUrl.toString(),{...options,headers,credentials:sameOrigin?"include":"omit",mode:"cors"});
   let data=null;try{data=await res.json()}catch{}
   if(!res.ok){const message=data?.stage?(data.error+' ['+data.stage+']'+(data.detail?' — '+data.detail:'')):data?.error||('Request failed ('+res.status+')');const err=new Error(message);err.status=res.status;err.data=data;throw err}
   return data;
