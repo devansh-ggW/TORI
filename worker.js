@@ -59,7 +59,7 @@ async function jsonBody(request){try{return await request.json()}catch{return{}}
 async function ensureSchema(env){
   if(!env.DB)throw new Error("D1 binding DB is not configured.");
   await env.DB.batch([
-    env.DB.prepare("CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY,email TEXT NOT NULL UNIQUE,password_hash TEXT NOT NULL,password_salt TEXT NOT NULL,full_name TEXT NOT NULL,date_of_birth TEXT NOT NULL,age_verified INTEGER NOT NULL DEFAULT 0,email_verified INTEGER NOT NULL DEFAULT 0,email_verification_token_hash TEXT,email_verification_expires_at TEXT,email_verification_sent_at TEXT,terms_accepted_at TEXT,terms_version TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL)"),
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY,email TEXT NOT NULL UNIQUE,password_hash TEXT NOT NULL,password_salt TEXT NOT NULL,full_name TEXT NOT NULL,date_of_birth TEXT NOT NULL,age_verified INTEGER NOT NULL DEFAULT 0,email_verified INTEGER NOT NULL DEFAULT 0,email_verification_token_hash TEXT,email_verification_expires_at TEXT,email_verification_sent_at TEXT,email_verification_email_id TEXT,terms_accepted_at TEXT,terms_version TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL)"),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS profiles (user_id TEXT PRIMARY KEY,business_name TEXT,avatar_data_url TEXT,knowledge_json TEXT NOT NULL DEFAULT '{}',integrations_json TEXT NOT NULL DEFAULT '{}',auto_reply_enabled INTEGER NOT NULL DEFAULT 0,plan TEXT NOT NULL DEFAULT 'free',created_at TEXT NOT NULL,updated_at TEXT NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)"),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY,user_id TEXT NOT NULL,expires_at TEXT NOT NULL,created_at TEXT NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)"),
@@ -73,6 +73,7 @@ async function ensureSchema(env){
   if(!userColumnNames.includes("email_verification_token_hash"))await env.DB.prepare("ALTER TABLE users ADD COLUMN email_verification_token_hash TEXT").run();
   if(!userColumnNames.includes("email_verification_expires_at"))await env.DB.prepare("ALTER TABLE users ADD COLUMN email_verification_expires_at TEXT").run();
   if(!userColumnNames.includes("email_verification_sent_at"))await env.DB.prepare("ALTER TABLE users ADD COLUMN email_verification_sent_at TEXT").run();
+  if(!userColumnNames.includes("email_verification_email_id"))await env.DB.prepare("ALTER TABLE users ADD COLUMN email_verification_email_id TEXT").run();
 
   const profileColumns=await env.DB.prepare("PRAGMA table_info(profiles)").all();
   if(!(profileColumns.results||[]).some(x=>x.name==="avatar_data_url")){
@@ -106,7 +107,9 @@ async function issueVerificationToken(env,request,user){
   const tokenHash=b64url(await sha256(token));
   const expires=new Date(Date.now()+24*60*60*1000).toISOString();
   await env.DB.prepare("UPDATE users SET email_verification_token_hash=?,email_verification_expires_at=?,email_verification_sent_at=?,updated_at=? WHERE id=?").bind(tokenHash,expires,now(),now(),user.id).run();
-  return await sendVerificationEmail(env,request,user,token);
+  const delivery=await sendVerificationEmail(env,request,user,token);
+  await env.DB.prepare("UPDATE users SET email_verification_email_id=?,updated_at=? WHERE id=?").bind(delivery?.id||null,now(),user.id).run();
+  return delivery;
 }
 
 async function verifyEmail(request,env){
@@ -124,6 +127,42 @@ async function verifyEmail(request,env){
   const a=await access(new Request(request.url,{headers:new Headers({"Authorization":"Bearer "+session})}),env);
   if(!a)throw new Error("Verified session could not be loaded.");
   return response({ok:true,verified:true,user:a.user,profile:a.profile,session_token:session},200,request,env,{"set-cookie":sessionCookie(session)});
+}
+
+async function verificationEmailStatus(request,env){
+  if(!env.RESEND_API_KEY)return response({error:"RESEND_API_KEY is not configured."},500,request,env);
+  const p=await jsonBody(request);
+  const emailId=String(p.email_id||"").trim();
+  const email=String(p.email||"").trim().toLowerCase();
+  if(!emailId||!validEmail(email))return response({error:"Verification email ID and email are required."},400,request,env);
+
+  const user=await env.DB.prepare("SELECT email,email_verification_sent_at FROM users WHERE email=? LIMIT 1").bind(email).first();
+  if(!user)return response({error:"Unable to check verification email status."},404,request,env);
+
+  // Only allow checking an email ID within the current verification window.
+  const sentAt=Date.parse(String(user.email_verification_sent_at||""));
+  if(!Number.isFinite(sentAt) || Date.now()-sentAt>24*60*60*1000){
+    return response({error:"That verification email is no longer active."},410,request,env);
+  }
+
+  const res=await fetch("https://api.resend.com/emails/"+encodeURIComponent(emailId),{
+    method:"GET",
+    headers:{"Authorization":"Bearer "+env.RESEND_API_KEY}
+  });
+  let data=null;try{data=await res.json()}catch{}
+  if(!res.ok)return response({error:data?.message||data?.error||"Could not retrieve email status from Resend."},502,request,env);
+
+  const recipients=Array.isArray(data?.to)?data.to.map(x=>String(x).toLowerCase()):[];
+  if(!recipients.includes(email))return response({error:"Email status does not match this account."},403,request,env);
+
+  return response({
+    ok:true,
+    email_id:data?.id||emailId,
+    message_id:data?.message_id||null,
+    last_event:data?.last_event||"unknown",
+    created_at:data?.created_at||null,
+    scheduled_at:data?.scheduled_at||null
+  },200,request,env);
 }
 
 async function resendVerification(request,env){
@@ -341,6 +380,7 @@ export default {async fetch(request,env){
     if(path==="/api/auth/signup"&&request.method==="POST")return signup(request,env);
     if(path==="/api/auth/verify-email"&&request.method==="POST")return verifyEmail(request,env);
     if(path==="/api/auth/resend-verification"&&request.method==="POST")return resendVerification(request,env);
+    if(path==="/api/auth/verification-status"&&request.method==="POST")return verificationEmailStatus(request,env);
     if(path==="/api/auth/signin"&&request.method==="POST")return signin(request,env);
     if(path==="/api/auth/signout"&&request.method==="POST")return signout(request,env);
     if(path==="/api/auth/me"&&request.method==="GET")return me(request,env);
