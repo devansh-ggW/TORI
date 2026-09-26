@@ -64,6 +64,7 @@ async function apiFetch(path,options={}){
   if(!res.ok){const message=data?.stage?(data.error+' ['+data.stage+']'+(data.detail?' — '+data.detail:'')):data?.error||('Request failed ('+res.status+')');const err=new Error(message);err.status=res.status;err.data=data;throw err}
   return data;
 }
+window.ReplyFlix={apiFetch,sessionToken,clearSessionToken};
 function save(){
   localStorage.setItem(STORE,JSON.stringify(K));
   const access=window.__REPLYFLIX_ACCESS;
@@ -292,31 +293,85 @@ function initAuth(){
   const nameField=$("nameField"),dobField=$("dobField"),ageAttest=$("ageAttest"),termsAttest=$("termsAttest");
   const fullName=$("fullName"),dob=$("dateOfBirth"),email=$("email"),password=$("password"),ageCheck=$("ageCheck"),termsCheck=$("termsCheck");
   const signedIn=$("signedIn"),signedEmail=$("signedEmail"),signOut=$("signOut");
+  const verificationState=$("verificationState"),verificationEmail=$("verificationEmail"),resendVerification=$("resendVerification"),backToAuth=$("backToAuth");
   const state={mode:new URLSearchParams(location.search).get("mode")==="signin"?"signin":"signup",requestId:0};
-  const maxDob=()=>{const d=new Date();d.setFullYear(d.getFullYear()-18);if(dob)dob.max=d.toISOString().slice(0,10)};maxDob();
+  const maxDob=()=>{const d=new Date();d.setFullYear(d.getFullYear()-18);if(dob)dob.max=d.toISOString().slice(0,10)};
   const setMsg=(t,type="neutral")=>{if(msg){msg.textContent=t;msg.className="authMsg "+type}};
   const hide=(n,v=true)=>{if(n)n.hidden=v};
-  const showForm=()=>{if(tabsWrap)tabsWrap.style.display="grid";if(form)form.style.display="";if(signedIn)signedIn.style.display="none";hide(form,false);hide(signedIn,true);const signup=state.mode==="signup";hide(nameField,!signup);hide(dobField,!signup);hide(ageAttest,!signup);hide(termsAttest,!signup);if(submit){submit.disabled=false;submit.textContent=signup?"CREATE ACCOUNT":"SIGN IN"}tabs.forEach(t=>t.classList.toggle("active",t.dataset.mode===state.mode))};
+
+  const showForm=()=>{
+    if(tabsWrap)tabsWrap.style.display="grid";
+    if(form)form.style.display="";
+    if(signedIn)signedIn.style.display="none";
+    hide(form,false);hide(signedIn,true);hide(verificationState,true);
+    const signup=state.mode==="signup";
+    hide(nameField,!signup);hide(dobField,!signup);hide(ageAttest,!signup);hide(termsAttest,!signup);
+    if(submit){submit.disabled=false;submit.textContent=signup?"CREATE ACCOUNT":"SIGN IN"}
+    tabs.forEach(t=>t.classList.toggle("active",t.dataset.mode===state.mode));
+  };
+
+  const showVerificationPending=(mail,message="Check your inbox to verify your email before continuing.")=>{
+    if(tabsWrap)tabsWrap.style.display="none";
+    if(form)form.style.display="none";
+    if(signedIn)signedIn.style.display="none";
+    hide(form,true);hide(signedIn,true);hide(verificationState,false);
+    if(verificationEmail)verificationEmail.value=mail||"";
+    setMsg(message,"neutral");
+  };
+
   const showSigned=user=>{
     if(tabsWrap)tabsWrap.style.display="none";
     if(form)form.style.display="none";
+    if(verificationState)verificationState.style.display="none";
     if(signedIn)signedIn.style.display="grid";
-    hide(form,true);hide(signedIn,false);
+    hide(form,true);hide(verificationState,true);hide(signedIn,false);
     if(signedEmail)signedEmail.textContent=user?.email||"Authenticated account";
-    const avatar=$("profileAvatar");
-    const avatarImg=$("profileAvatarImg");
+    const avatar=$("profileAvatar"),avatarImg=$("profileAvatarImg");
     if(avatarImg){
       avatarImg.src=window.__REPLYFLIX_ACCESS?.profile?.avatar_data_url||"";
       avatarImg.hidden=!avatarImg.src;
       avatar?.classList.toggle("hasImage",!!avatarImg.src);
     }
-    setMsg("Signed in successfully.","good")
+    setMsg("Signed in successfully.","good");
   };
-  const setMode=mode=>{state.mode=mode==="signin"?"signin":"signup";history.replaceState(null,"","auth.html?mode="+state.mode);showForm();setMsg(state.mode==="signin"?"Sign in with your account.":"Create your ReplyFlix account. You must be 18 or older.","neutral")};
+
+  const setMode=mode=>{
+    state.mode=mode==="signin"?"signin":"signup";
+    history.replaceState(null,"","auth.html?mode="+state.mode);
+    showForm();
+    setMsg(state.mode==="signin"?"Sign in with your account.":"Create your ReplyFlix account. You must be 18 or older.","neutral");
+  };
+
   tabs.forEach(t=>t.addEventListener("click",()=>setMode(t.dataset.mode)));
-  signOut?.addEventListener("click",async()=>{signOut.disabled=true;try{await apiFetch('/auth/signout',{method:'POST'})}catch{}clearSessionToken();window.__REPLYFLIX_ACCESS=null;signOut.disabled=false;state.mode="signin";window.dispatchEvent(new CustomEvent("replyflix:auth-changed",{detail:{authenticated:false}}));history.replaceState(null,"","auth.html?mode=signin");showForm();setMsg("Signed out.","good")});
+  backToAuth?.addEventListener("click",()=>setMode("signin"));
+
+  resendVerification?.addEventListener("click",async()=>{
+    const mail=String(verificationEmail?.value||"").trim().toLowerCase();
+    if(!mail){setMsg("Enter the email address you used to create the account.","warn");return}
+    resendVerification.disabled=true;
+    resendVerification.textContent="SENDING…";
+    try{
+      const data=await apiFetch("/auth/resend-verification",{method:"POST",body:JSON.stringify({email:mail})});
+      setMsg(data?.message||"A new verification email has been sent.","good");
+    }catch(err){
+      setMsg(err.message||"Could not resend the verification email.","warn");
+    }finally{
+      resendVerification.disabled=false;
+      resendVerification.textContent="RESEND VERIFICATION";
+    }
+  });
+
+  signOut?.addEventListener("click",async()=>{
+    signOut.disabled=true;
+    try{await apiFetch("/auth/signout",{method:"POST"})}catch{}
+    clearSessionToken();window.__REPLYFLIX_ACCESS=null;signOut.disabled=false;state.mode="signin";
+    window.dispatchEvent(new CustomEvent("replyflix:auth-changed",{detail:{authenticated:false}}));
+    history.replaceState(null,"","auth.html?mode=signin");showForm();setMsg("Signed out.","good");
+  });
+
   form.addEventListener("submit",async e=>{
-    e.preventDefault();const mail=email?.value.trim().toLowerCase()||"",pass=password?.value||"";
+    e.preventDefault();
+    const mail=email?.value.trim().toLowerCase()||"",pass=password?.value||"";
     if(!mail||!pass){setMsg("Email and password are required.","warn");return}
     if(pass.length<8){setMsg("Password must be at least 8 characters.","warn");return}
     if(state.mode==="signup"){
@@ -327,23 +382,66 @@ function initAuth(){
     const requestId=++state.requestId;
     submit.disabled=true;submit.textContent=state.mode==="signup"?"CREATING…":"SIGNING IN…";
     try{
-      const data=await apiFetch(state.mode==="signup"?'/auth/signup':'/auth/signin',{method:'POST',body:JSON.stringify(state.mode==="signup"?{
+      const data=await apiFetch(state.mode==="signup"?"/auth/signup":"/auth/signin",{method:"POST",body:JSON.stringify(state.mode==="signup"?{
         email:mail,password:pass,full_name:fullName.value.trim(),date_of_birth:dob.value,
         age_attested:true,terms_accepted_at:new Date().toISOString(),terms_version:"2026-09-23"
       }:{email:mail,password:pass})});
-      if(data?.session_token)try{sessionStorage.setItem('replyflix_session',data.session_token)}catch{}
+
+      if(data?.verification_required){
+        if(requestId===state.requestId)showVerificationPending(data.email||mail);
+        return;
+      }
+
+      if(data?.session_token)try{sessionStorage.setItem("replyflix_session",data.session_token)}catch{}
       window.__REPLYFLIX_ACCESS={user:data.user,profile:data.profile};
       submit.disabled=false;
       if(requestId===state.requestId){showSigned(data.user);window.dispatchEvent(new CustomEvent("replyflix:auth-changed",{detail:{authenticated:true}}));}
     }catch(err){
       submit.disabled=false;
-      if(requestId===state.requestId){showForm();setMsg(err.message||"Authentication failed.","warn");}
+      if(requestId!==state.requestId)return;
+      if(err.data?.verification_required){
+        showVerificationPending(err.data.email||mail,err.data.message||err.message||"Please verify your email before signing in.");
+        return;
+      }
+      showForm();setMsg(err.message||"Authentication failed.","warn");
     }
   });
+
+  const verifyToken=String(new URLSearchParams(location.search).get("verify")||"").trim();
   (async()=>{
-    maxDob();showForm();
+    maxDob();
+
+    if(verifyToken){
+      if(tabsWrap)tabsWrap.style.display="none";
+      if(form)form.style.display="none";
+      if(signedIn)signedIn.style.display="none";
+      hide(form,true);hide(signedIn,true);
+      if(verificationState)verificationState.style.display="grid";
+      if(verificationEmail)verificationEmail.value="";
+      if(resendVerification)resendVerification.hidden=true;
+      if(backToAuth)backToAuth.hidden=true;
+      setMsg("Verifying your email…","neutral");
+      try{
+        const data=await apiFetch("/auth/verify-email",{method:"POST",body:JSON.stringify({token:verifyToken})});
+        if(data?.session_token)try{sessionStorage.setItem("replyflix_session",data.session_token)}catch{}
+        window.__REPLYFLIX_ACCESS={user:data.user,profile:data.profile};
+        history.replaceState(null,"","auth.html?mode=signin");
+        if(resendVerification)resendVerification.hidden=false;
+        if(backToAuth)backToAuth.hidden=false;
+        showSigned(data.user);
+        window.dispatchEvent(new CustomEvent("replyflix:auth-changed",{detail:{authenticated:true}}));
+      }catch(err){
+        if(resendVerification)resendVerification.hidden=false;
+        if(backToAuth)backToAuth.hidden=false;
+        showVerificationPending("",err.message||"This verification link is invalid or has expired.");
+        setMsg(err.message||"This verification link is invalid or has expired.","warn");
+      }
+      return;
+    }
+
+    showForm();
     try{
-      const data=await apiFetch('/auth/me');
+      const data=await apiFetch("/auth/me");
       if(state.requestId===0){window.__REPLYFLIX_ACCESS={user:data.user,profile:data.profile};showSigned(data.user)}
     }catch{
       if(state.requestId===0)setMsg(state.mode==="signin"?"Sign in with your account.":"Create your ReplyFlix account. You must be 18 or older.","neutral")
