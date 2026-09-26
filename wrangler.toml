@@ -16,8 +16,5 @@ binding = "ASSETS"
 run_worker_first = ["/api/*"]
 
 [[routes]]
-pattern = "api.replyflix.dewify.shop"
+pattern = "ai.replyflix.dewify.shop"
 custom_domain = true
-
-[[routes]]
-pattern = "replyflix.dewify.shop/automation/*"
