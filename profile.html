@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#f3f0e8">
+<meta name="description" content="ReplyFlix profile settings">
+<link rel="stylesheet" href="styles.css?v=26">
+<link rel="stylesheet" href="replyflix-theme.css?v=2">
+<link rel="icon" type="image/png" href="replyflix-icon.svg">
+<script src="replyflix-config.js?v=1"></script>
+</head>
+<body data-protected="true">
+<header><div class="wrap nav">
+<a class="brand" href="index.html"><img src="replyflix-icon.svg" class="brandIcon" alt="">ReplyFlix</a>
+<nav class="navlinks" id="navlinks">
+<a data-page href="index.html">HOME</a><a data-page href="product.html">PRODUCT</a><a data-page href="core.html">CORE</a><a data-page href="knowledge.html">KNOWLEDGE</a><a data-page href="messages.html">MESSAGES</a><a data-page href="lab.html">LAB</a><a data-page href="downloads.html">DOWNLOADS</a><a data-page href="faq.html">FAQ</a>
+</nav>
+<div class="actions"><a class="btn dark" href="auth.html">ACCOUNT</a><button class="menu" id="menu" type="button" aria-expanded="false" aria-controls="navlinks">MENU</button></div>
+</div></header>
+<main>
+<section class="profileHero">
+<div class="wrap">
+<div class="kickerLine"><i></i><span class="kicker">REPLYFLIX / PROFILE</span></div>
+<div class="profileHead"><div><h1>YOUR PROFILE.</h1><p class="lede">Adjust your profile picture, edit your display name, then save all changes together.</p></div><div id="profileState" class="profileState">LOADING</div></div>
+</div>
+</section>
+<section class="profileSection">
+<div class="wrap profileGrid">
+<div class="profileEditor panel">
+<div class="panelTop"><div><span class="eyebrow">IDENTITY</span><h2>PROFILE DETAILS</h2></div><span id="dirtyBadge" class="dirtyBadge" hidden>UNSAVED CHANGES</span></div>
+<div id="profileMessage" class="profileMessage neutral">Your changes stay local until you press SAVE CHANGES.</div>
+<div class="field"><label for="profileName">DISPLAY NAME</label><input id="profileName" type="text" maxlength="120" placeholder="Your name"></div>
+<div class="field"><label for="profileEmail">EMAIL</label><input id="profileEmail" type="email" readonly></div>
+</div>
+
+<div class="profileEditor panel">
+<div class="panelTop"><div><span class="eyebrow">PROFILE IMAGE</span><h2>IMAGE ADJUST</h2></div><span class="smallNote">256 × 256 preview</span></div>
+<div class="imageEditor">
+<div class="imageStage"><canvas id="imageCanvas" width="320" height="320"></canvas><div id="imagePlaceholder" class="imagePlaceholder">UPLOAD AN IMAGE</div></div>
+<div class="imageControls">
+<label class="btn fileBtn" for="imageInput">CHOOSE IMAGE</label>
+<input id="imageInput" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+<div class="controlRow"><label for="zoom">ZOOM</label><input id="zoom" type="range" min="1" max="3" step=".01" value="1"></div>
+<div class="controlButtons"><button class="mini" id="rotateLeft" type="button">ROTATE −90°</button><button class="mini" id="rotateRight" type="button">ROTATE +90°</button><button class="mini" id="resetImage" type="button">RESET IMAGE</button></div>
+<div class="smallNote">Drag the image inside the square to reposition it. Changes are not uploaded until SAVE CHANGES.</div>
+</div>
+</div>
+</div>
+</div>
+
+<div class="saveBar">
+<div><strong id="saveTitle">NO UNSAVED CHANGES</strong><span id="saveHint">Upload or adjust the image, or change your display name.</span></div>
+<button class="btn" id="saveChanges" type="button" disabled>SAVE CHANGES</button>
+</div>
+</section>
+</main>
+<footer><div class="wrap foot"><div>ReplyFlix / Profile</div><div class="footLinks"><a href="auth.html">Account</a><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a></div></div></footer>
+<div class="toast" id="toast"></div>
+<script src="app.js?v=26"></script>
+<script src="profile.js?v=1"></script>
+</body></html>
