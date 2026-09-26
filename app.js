@@ -314,38 +314,6 @@ function initAuth(){
   const setMode=mode=>{state.mode=mode==="signin"?"signin":"signup";history.replaceState(null,"","auth.html?mode="+state.mode);showForm();setMsg(state.mode==="signin"?"Sign in with your account.":"Create your ReplyFlix account. You must be 18 or older.","neutral")};
   tabs.forEach(t=>t.addEventListener("click",()=>setMode(t.dataset.mode)));
   signOut?.addEventListener("click",async()=>{signOut.disabled=true;try{await apiFetch('/auth/signout',{method:'POST'})}catch{}clearSessionToken();window.__REPLYFLIX_ACCESS=null;signOut.disabled=false;state.mode="signin";history.replaceState(null,"","auth.html?mode=signin");showForm();setMsg("Signed out.","good")});
-  const applyAvatar=src=>{
-    window.__REPLYFLIX_ACCESS=window.__REPLYFLIX_ACCESS||{};
-    window.__REPLYFLIX_ACCESS.profile=window.__REPLYFLIX_ACCESS.profile||{};
-    window.__REPLYFLIX_ACCESS.profile.avatar_data_url=src||null;
-    const img=$("profileAvatarImg");
-    if(img){img.src=src||"";img.hidden=!src}
-  };
-  $("profileAvatarInput")?.addEventListener("change",async e=>{
-    const file=e.target.files?.[0]; if(!file)return;
-    if(!/^image\/(png|jpeg|webp)$/i.test(file.type)){setMsg("Use a PNG, JPEG, or WebP profile picture.","warn");e.target.value="";return}
-    if(file.size>4*1024*1024){setMsg("Choose an image smaller than 4 MB.","warn");e.target.value="";return}
-    try{
-      const src=await new Promise((resolve,reject)=>{
-        const rd=new FileReader();rd.onload=()=>resolve(String(rd.result));rd.onerror=()=>reject(new Error("Could not read image."));rd.readAsDataURL(file);
-      });
-      const img=new Image();img.onload=async()=>{
-        const max=256,scale=Math.min(1,max/img.width,max/img.height);
-        const canvas=document.createElement("canvas");canvas.width=Math.max(1,Math.round(img.width*scale));canvas.height=Math.max(1,Math.round(img.height*scale));
-        const ctx=canvas.getContext("2d");ctx.drawImage(img,0,0,canvas.width,canvas.height);
-        const compressed=canvas.toDataURL(file.type==="image/png"?"image/webp":"image/webp",.82);
-        if(compressed.length>350000){setMsg("That picture is still too large. Choose another image.","warn");return}
-        try{
-          const data=await apiFetch('/profile',{method:'PUT',body:JSON.stringify({avatar_data_url:compressed})});
-          if(window.__REPLYFLIX_ACCESS?.profile)window.__REPLYFLIX_ACCESS.profile=data.profile;
-          applyAvatar(compressed);setMsg("Profile picture updated.","good");
-        }catch(err){setMsg(err.message||"Could not save profile picture.","warn")}
-      };img.onerror=()=>setMsg("Could not process that image.","warn");img.src=String(src);
-    }catch(err){setMsg(err.message||"Could not read profile picture.","warn")}
-  });
-  $("removeProfileAvatar")?.addEventListener("click",async()=>{
-    try{const data=await apiFetch('/profile',{method:'PUT',body:JSON.stringify({avatar_data_url:null})});if(window.__REPLYFLIX_ACCESS?.profile)window.__REPLYFLIX_ACCESS.profile=data.profile;applyAvatar("");setMsg("Profile picture removed.","good")}catch(err){setMsg(err.message||"Could not remove profile picture.","warn")}
-  });
   form.addEventListener("submit",async e=>{
     e.preventDefault();const mail=email?.value.trim().toLowerCase()||"",pass=password?.value||"";
     if(!mail||!pass){setMsg("Email and password are required.","warn");return}
@@ -477,5 +445,5 @@ function init(){
   render();if($('incoming'))resetResult();
   initTheme();initAuth();initProtectedPage();initMessages();
 }
-window.ReplyFlix={analyze,load:()=>K,save,normalize,INTENTS,reset:()=>{K=blank();save();return K}};
+window.ReplyFlix={analyze,load:()=>K,save,normalize,INTENTS,apiFetch,reset:()=>{K=blank();save();return K}};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
