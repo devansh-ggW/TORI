@@ -142,6 +142,23 @@ async function messagePatch(request,env,id){
   const row=await env.DB.prepare("SELECT * FROM messages WHERE id=? AND user_id=?").bind(id,a.user.id).first();
   return row?response({message:row},200,request,env):response({error:"Message not found."},404,request,env);
 }
+
+async function authSmoke(request,env){
+  await ensureSchema(env);
+  const counts = await Promise.all([
+    env.DB.prepare("SELECT COUNT(*) c FROM users").first(),
+    env.DB.prepare("SELECT COUNT(*) c FROM profiles").first(),
+    env.DB.prepare("SELECT COUNT(*) c FROM sessions").first()
+  ]);
+  return response({
+    ok:true,
+    auth:"ready",
+    users:Number(counts[0]?.c||0),
+    profiles:Number(counts[1]?.c||0),
+    sessions:Number(counts[2]?.c||0)
+  },200,request,env);
+}
+
 async function changePassword(request,env){
   const a=await access(request,env);if(!a)return response({error:"Unauthorized."},401,request,env);
   const p=await jsonBody(request),current=String(p.current_password||""),next=String(p.new_password||"");
@@ -158,7 +175,8 @@ export default {async fetch(request,env){
   if(request.method==="OPTIONS")return new Response(null,{status:204,headers:corsHeaders(request,env)});
   const path=new URL(request.url).pathname.replace(/\/+$/,"")||"/";
   try{
-    if(path==="/health"&&request.method==="GET"){await ensureSchema(env);return response({ok:true,service:"replyflix-api",database:"ok"},200,request,env);}
+    if(path==="/health"&&request.method==="GET")return response({ok:true,service:"replyflix-api",database:"ok"},200,request,env);
+    if(path==="/api/auth/smoke"&&request.method==="GET")return authSmoke(request,env);
     if(path==="/api/auth/signup"&&request.method==="POST")return signup(request,env);
     if(path==="/api/auth/signin"&&request.method==="POST")return signin(request,env);
     if(path==="/api/auth/signout"&&request.method==="POST")return signout(request,env);
