@@ -143,6 +143,13 @@ async function messagePatch(request,env,id){
   return row?response({message:row},200,request,env):response({error:"Message not found."},404,request,env);
 }
 
+
+async function authDiagnostics(request,env){
+  if(!env.DB)return response({ok:false,database_binding:false},500,request,env);
+  const tables=await env.DB.prepare("SELECT name, sql FROM sqlite_master WHERE type='table' AND name IN ('users','profiles','sessions','messages') ORDER BY name").all();
+  return response({ok:true,database_binding:true,tables:(tables.results||[]).map(x=>({name:x.name,sql:x.sql}))},200,request,env);
+}
+
 async function authSmoke(request,env){
   await ensureSchema(env);
   const counts = await Promise.all([
@@ -177,6 +184,7 @@ export default {async fetch(request,env){
   try{
     if(path==="/health"&&request.method==="GET")return response({ok:true,service:"replyflix-api",database:"ok"},200,request,env);
     if(path==="/api/auth/smoke"&&request.method==="GET")return authSmoke(request,env);
+    if(path==="/api/auth/diagnostic"&&request.method==="GET")return authDiagnostics(request,env);
     if(path==="/api/auth/signup"&&request.method==="POST")return signup(request,env);
     if(path==="/api/auth/signin"&&request.method==="POST")return signin(request,env);
     if(path==="/api/auth/signout"&&request.method==="POST")return signout(request,env);
