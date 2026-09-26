@@ -1,5 +1,5 @@
 const STORE='replyflix-knowledge-v1';
-const REPLYFLIX_SITE_URL='https://tori.dewify.shop';
+const REPLYFLIX_SITE_URL='https://replyflix.dewify.shop';
 const THEME_KEY='replyflix-theme';
 
 const INTENTS={
