@@ -50,7 +50,7 @@ async function access(request,env){
   const row=await env.DB.prepare("SELECT u.*,p.business_name,p.knowledge_json,p.integrations_json,p.auto_reply_enabled,p.plan,p.created_at AS p_created_at,p.updated_at AS p_updated_at,p.avatar_data_url FROM sessions s JOIN users u ON u.id=s.user_id LEFT JOIN profiles p ON p.user_id=u.id WHERE s.token_hash=? AND s.expires_at>? LIMIT 1").bind(tokenHash,now()).first();
   if(!row)return null;
   return{
-    user:{id:row.id,email:row.email,full_name:row.full_name,date_of_birth:row.date_of_birth,age_verified:!!row.age_verified,created_at:row.created_at},
+    user:{id:row.id,email:row.email,full_name:row.full_name,date_of_birth:row.date_of_birth,age_verified:!!row.age_verified,email_verified:!!row.email_verified,created_at:row.created_at},
     profile:profileOut({user_id:row.id,business_name:row.business_name,avatar_data_url:row.avatar_data_url,knowledge_json:row.knowledge_json,integrations_json:row.integrations_json,auto_reply_enabled:row.auto_reply_enabled,plan:row.plan,created_at:row.p_created_at,updated_at:row.p_updated_at})
   };
 }
@@ -59,7 +59,7 @@ async function jsonBody(request){try{return await request.json()}catch{return{}}
 async function ensureSchema(env){
   if(!env.DB)throw new Error("D1 binding DB is not configured.");
   await env.DB.batch([
-    env.DB.prepare("CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY,email TEXT NOT NULL UNIQUE,password_hash TEXT NOT NULL,password_salt TEXT NOT NULL,full_name TEXT NOT NULL,date_of_birth TEXT NOT NULL,age_verified INTEGER NOT NULL DEFAULT 0,terms_accepted_at TEXT,terms_version TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL)"),
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY,email TEXT NOT NULL UNIQUE,password_hash TEXT NOT NULL,password_salt TEXT NOT NULL,full_name TEXT NOT NULL,date_of_birth TEXT NOT NULL,age_verified INTEGER NOT NULL DEFAULT 0,email_verified INTEGER NOT NULL DEFAULT 0,email_verification_token_hash TEXT,email_verification_expires_at TEXT,email_verification_sent_at TEXT,terms_accepted_at TEXT,terms_version TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL)"),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS profiles (user_id TEXT PRIMARY KEY,business_name TEXT,avatar_data_url TEXT,knowledge_json TEXT NOT NULL DEFAULT '{}',integrations_json TEXT NOT NULL DEFAULT '{}',auto_reply_enabled INTEGER NOT NULL DEFAULT 0,plan TEXT NOT NULL DEFAULT 'free',created_at TEXT NOT NULL,updated_at TEXT NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)"),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY,user_id TEXT NOT NULL,expires_at TEXT NOT NULL,created_at TEXT NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)"),
@@ -67,9 +67,79 @@ async function ensureSchema(env){
     env.DB.prepare("CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,source TEXT NOT NULL,sender_name TEXT,sender_handle TEXT,body TEXT NOT NULL,received_at TEXT NOT NULL,business_related INTEGER NOT NULL DEFAULT 0,relevance_confidence INTEGER NOT NULL DEFAULT 0,reply_confidence INTEGER NOT NULL DEFAULT 0,status TEXT NOT NULL DEFAULT 'review',reply_text TEXT,metadata_json TEXT NOT NULL DEFAULT '{}',created_at TEXT NOT NULL,updated_at TEXT NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_messages_user_received ON messages(user_id,received_at DESC)")
   ]);
+  const userColumns=await env.DB.prepare("PRAGMA table_info(users)").all();
+  const userColumnNames=(userColumns.results||[]).map(x=>x.name);
+  if(!userColumnNames.includes("email_verified"))await env.DB.prepare("ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 1").run();
+  if(!userColumnNames.includes("email_verification_token_hash"))await env.DB.prepare("ALTER TABLE users ADD COLUMN email_verification_token_hash TEXT").run();
+  if(!userColumnNames.includes("email_verification_expires_at"))await env.DB.prepare("ALTER TABLE users ADD COLUMN email_verification_expires_at TEXT").run();
+  if(!userColumnNames.includes("email_verification_sent_at"))await env.DB.prepare("ALTER TABLE users ADD COLUMN email_verification_sent_at TEXT").run();
+
   const profileColumns=await env.DB.prepare("PRAGMA table_info(profiles)").all();
   if(!(profileColumns.results||[]).some(x=>x.name==="avatar_data_url")){
     await env.DB.prepare("ALTER TABLE profiles ADD COLUMN avatar_data_url TEXT").run();
+  }
+}
+
+function htmlEscape(v){return String(v??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
+
+async function sendVerificationEmail(env,request,user,token){
+  if(!env.RESEND_API_KEY)throw new Error("RESEND_API_KEY is not configured.");
+  const base=String(env.ALLOWED_ORIGIN||new URL(request.url).origin).replace(/\/$/,"");
+  const verificationUrl=base+"/auth.html?verify="+encodeURIComponent(token);
+  const firstName=htmlEscape(String(user.fullName||"there").trim().split(/\s+/)[0]||"there");
+  const from=env.RESEND_FROM||"ReplyFlix <noreply@tori.dewify.shop>";
+  const html="<!doctype html><html><body style=\"margin:0;background:#f4f5f6;font-family:Arial,sans-serif;color:#111318\"><div style=\"max-width:560px;margin:40px auto;padding:32px;background:#fff;border:1px solid #e1e4e8;border-radius:14px\"><p style=\"font-size:12px;font-weight:700;letter-spacing:.08em;color:#6b7280\">REPLYFLIX / ACCOUNT</p><h1 style=\"font-size:32px;margin:10px 0 14px\">Verify your email.</h1><p style=\"font-size:15px;line-height:1.6\">Hey "+firstName+" — confirm this email address to finish creating your ReplyFlix account.</p><p><a href=\""+verificationUrl+"\" style=\"display:inline-block;padding:12px 18px;background:#2f6ff2;color:#fff;text-decoration:none;border-radius:8px;font-weight:700\">VERIFY EMAIL</a></p><p style=\"font-size:13px;line-height:1.6;color:#687080\">This link expires in 24 hours and can only be used once. If you did not create this account, you can ignore this email.</p></div></body></html>";
+  const text="Verify your ReplyFlix email:\n\n"+verificationUrl+"\n\nThis link expires in 24 hours and can only be used once. If you did not create this account, ignore this email.";
+  const res=await fetch("https://api.resend.com/emails",{method:"POST",headers:{"Authorization":"Bearer "+env.RESEND_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({from,to:[user.email],subject:"Verify your ReplyFlix email",html,text})});
+  if(!res.ok){
+    let detail="Resend request failed.";
+    try{const body=await res.json();detail=body?.message||body?.error||detail}catch{}
+    throw new Error(detail);
+  }
+}
+
+async function issueVerificationToken(env,request,user){
+  const token=b64url(randomBytes(32));
+  const tokenHash=b64url(await sha256(token));
+  const expires=new Date(Date.now()+24*60*60*1000).toISOString();
+  await env.DB.prepare("UPDATE users SET email_verification_token_hash=?,email_verification_expires_at=?,email_verification_sent_at=?,updated_at=? WHERE id=?").bind(tokenHash,expires,now(),now(),user.id).run();
+  await sendVerificationEmail(env,request,user,token);
+}
+
+async function verifyEmail(request,env){
+  await ensureSchema(env);
+  const p=await jsonBody(request);
+  const token=String(p.token||"").trim();
+  if(!token)return response({error:"Verification token is missing."},400,request,env);
+  const tokenHash=b64url(await sha256(token));
+  const user=await env.DB.prepare("SELECT * FROM users WHERE email_verification_token_hash=? AND email_verification_expires_at>? LIMIT 1").bind(tokenHash,now()).first();
+  if(!user)return response({error:"This verification link is invalid or has expired."},400,request,env);
+
+  const t=now();
+  await env.DB.prepare("UPDATE users SET email_verified=1,email_verification_token_hash=NULL,email_verification_expires_at=NULL,email_verification_sent_at=NULL,updated_at=? WHERE id=?").bind(t,user.id).run();
+  const session=await newSession(env,user.id);
+  const a=await access(new Request(request.url,{headers:new Headers({"Authorization":"Bearer "+session})}),env);
+  if(!a)throw new Error("Verified session could not be loaded.");
+  return response({ok:true,verified:true,user:a.user,profile:a.profile,session_token:session},200,request,env,{"set-cookie":sessionCookie(session)});
+}
+
+async function resendVerification(request,env){
+  await ensureSchema(env);
+  const p=await jsonBody(request);
+  const email=String(p.email||"").trim().toLowerCase();
+  if(!validEmail(email))return response({error:"Enter a valid email address."},400,request,env);
+  const user=await env.DB.prepare("SELECT id,email,full_name,email_verified,email_verification_sent_at FROM users WHERE email=? LIMIT 1").bind(email).first();
+  if(!user||Number(user.email_verified)===1)return response({ok:true,message:"If that account needs verification, a new email has been sent."},200,request,env);
+
+  const sentAt=Date.parse(String(user.email_verification_sent_at||""));
+  if(Number.isFinite(sentAt)&&Date.now()-sentAt<60000)return response({error:"Please wait a minute before requesting another verification email."},429,request,env);
+
+  try{
+    await issueVerificationToken(env,request,user);
+    return response({ok:true,message:"A new verification email has been sent."},200,request,env);
+  }catch(err){
+    console.error("resend verification:",err);
+    return response({error:"We could not send the verification email right now. Please try again shortly."},503,request,env);
   }
 }
 
@@ -96,19 +166,25 @@ async function signup(request,env){
     const id=uid(),t=now(),hp=await hashPassword(password);
 
     stage="create-account";
+    const id=uid(),t=now(),hp=await hashPassword(password);
+    const verificationToken=b64url(randomBytes(32));
+    const verificationHash=b64url(await sha256(verificationToken));
+    const verificationExpires=new Date(Date.now()+24*60*60*1000).toISOString();
+
     await env.DB.batch([
-      env.DB.prepare("INSERT INTO users(id,email,password_hash,password_salt,full_name,date_of_birth,age_verified,terms_accepted_at,terms_version,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)").bind(id,email,hp.hash,hp.salt,fullName,dob,1,String(p.terms_accepted_at),String(p.terms_version||"2026-09-23"),t,t),
+      env.DB.prepare("INSERT INTO users(id,email,password_hash,password_salt,full_name,date_of_birth,age_verified,email_verified,email_verification_token_hash,email_verification_expires_at,email_verification_sent_at,terms_accepted_at,terms_version,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(id,email,hp.hash,hp.salt,fullName,dob,1,0,verificationHash,verificationExpires,t,String(p.terms_accepted_at),String(p.terms_version||"2026-09-23"),t,t),
       env.DB.prepare("INSERT INTO profiles(user_id,plan,auto_reply_enabled,knowledge_json,integrations_json,created_at,updated_at,avatar_data_url) VALUES(?,?,?,?,?,?,?,?)").bind(id,"free",0,"{}","{}",t,t,null)
     ]);
 
-    stage="create-session";
-    const token=await newSession(env,id);
+    stage="send-verification";
+    try{
+      await sendVerificationEmail(env,request,{id,email,fullName},verificationToken);
+    }catch(err){
+      console.error("verification email:",err);
+      return response({error:"Account created, but the verification email could not be sent yet. Please use RESEND VERIFICATION.",email,verification_required:true},503,request,env);
+    }
 
-    stage="load-session";
-    const a=await access(new Request(request.url,{headers:new Headers({"Authorization":"Bearer "+token})}),env);
-    if(!a)throw new Error("New session could not be loaded.");
-
-    return response({user:a.user,profile:a.profile,session_token:token},201,request,env,{"set-cookie":sessionCookie(token)});
+    return response({ok:true,email,verification_required:true},201,request,env);
   }catch(err){
     console.error("signup stage:",stage,err);
     return response({error:"Signup failed.",stage,detail:String(err?.message||err||"unknown error")},500,request,env);
@@ -126,6 +202,7 @@ async function signin(request,env){
     const u=await env.DB.prepare("SELECT * FROM users WHERE email=? LIMIT 1").bind(email).first();
     stage="verify-password";
     if(!u||!(await verifyPassword(password,u.password_salt,u.password_hash)))return response({error:"Invalid email or password."},401,request,env);
+    if(Number(u.email_verified)!==1)return response({error:"Please verify your email before signing in.",verification_required:true,email:u.email},403,request,env);
 
     stage="create-session";
     const token=await newSession(env,u.id);
@@ -259,6 +336,8 @@ export default {async fetch(request,env){
     if(path==="/api/auth/smoke"&&request.method==="GET")return authSmoke(request,env);
     if(path==="/api/auth/diagnostic"&&request.method==="GET")return authDiagnostics(request,env);
     if(path==="/api/auth/signup"&&request.method==="POST")return signup(request,env);
+    if(path==="/api/auth/verify-email"&&request.method==="POST")return verifyEmail(request,env);
+    if(path==="/api/auth/resend-verification"&&request.method==="POST")return resendVerification(request,env);
     if(path==="/api/auth/signin"&&request.method==="POST")return signin(request,env);
     if(path==="/api/auth/signout"&&request.method==="POST")return signout(request,env);
     if(path==="/api/auth/me"&&request.method==="GET")return me(request,env);
