@@ -1,4 +1,4 @@
-window.REPLYFLIX_CONFIG={apiBase:"/automation/api"};
+window.REPLYFLIX_CONFIG={apiBase:"https://ai.replyflix.dewify.shop/api"};
 window.REPLYFLIX_CONNECTORS={
   whatsapp:{label:"WhatsApp Business"},
   instagram:{label:"Instagram"},
