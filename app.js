@@ -388,7 +388,19 @@ function initAuth(){
       }:{email:mail,password:pass})});
 
       if(data?.verification_required){
-        if(requestId===state.requestId)showVerificationPending(data.email||mail);
+        if(requestId===state.requestId){
+          const sent=data.email_sent!==false;
+          showVerificationPending(
+            data.email||mail,
+            sent
+              ? "Check your inbox to verify your email before continuing."
+              : "Your account was created, but the verification email could not be sent. Use RESEND VERIFICATION."
+          );
+          setMsg(
+            sent ? "Verification email accepted by the mail provider." : "Verification email was not sent. Please use RESEND VERIFICATION.",
+            sent?"neutral":"warn"
+          );
+        }
         return;
       }
 
@@ -400,7 +412,19 @@ function initAuth(){
       submit.disabled=false;
       if(requestId!==state.requestId)return;
       if(err.data?.verification_required){
-        showVerificationPending(err.data.email||mail,err.data.message||err.message||"Please verify your email before signing in.");
+        const sent=err.data.email_sent!==false;
+        showVerificationPending(
+          err.data.email||mail,
+          sent
+            ? (err.data.message||err.message||"Check your inbox to verify your email before continuing.")
+            : (err.data.message||err.message||"Your account was created, but the verification email could not be sent. Use RESEND VERIFICATION.")
+        );
+        setMsg(
+          sent
+            ? (err.data.message||"Check your inbox to verify your email before continuing.")
+            : (err.data.message||"The verification email could not be sent. You can retry from this screen."),
+          sent?"neutral":"warn"
+        );
         return;
       }
       showForm();setMsg(err.message||"Authentication failed.","warn");
