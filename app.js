@@ -457,6 +457,17 @@ function initSiteAuthControls(){
   };
   sync();
   window.addEventListener("replyflix:auth-changed",e=>render(!!e.detail?.authenticated));
+  document.addEventListener("click",e=>{
+    const link=e.target.closest("a[href]");
+    if(!link)return;
+    if(link.target==="_blank")return;
+    const href=link.getAttribute("href");
+    if(!href||href.startsWith("#")||href.startsWith("mailto:")||href.startsWith("tel:"))return;
+    // Keep navigation reliable on the Cloudflare Worker static site.
+    if(/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(href))return;
+    e.preventDefault();
+    location.assign(href);
+  },true);
 }
 
 function init(){
