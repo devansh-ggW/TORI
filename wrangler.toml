@@ -3,7 +3,7 @@ main = "worker.js"
 compatibility_date = "2026-09-26"
 
 [vars]
-ALLOWED_ORIGIN = "https://tori.dewify.shop"
+ALLOWED_ORIGIN = "https://replyflix.dewify.shop"
 
 [[d1_databases]]
 binding = "DB"
