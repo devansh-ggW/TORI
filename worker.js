@@ -19,7 +19,7 @@ function response(data,status,request,env,extra={}){
 function now(){return new Date().toISOString()}
 function uid(){return crypto.randomUUID()}
 function randomBytes(n){const x=new Uint8Array(n);crypto.getRandomValues(x);return x}
-function b64url(bytes){let s="";for(const b of bytes)s+=String.fromCharCode(b);return btoa(s).replace(/\\+/g,"-").replace(/\\//g,"_").replace(/=+$/,"")}
+function b64url(bytes){let s="";for(const b of bytes)s+=String.fromCharCode(b);return btoa(s).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"")}
 function fromB64url(s){s=s.replace(/-/g,"+").replace(/_/g,"/");while(s.length%4)s+="=";const bin=atob(s),out=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)out[i]=bin.charCodeAt(i);return out}
 async function sha256(value){const d=await crypto.subtle.digest("SHA-256",typeof value==="string"?new TextEncoder().encode(value):value);return new Uint8Array(d)}
 function equalBytes(a,b){if(a.length!==b.length)return false;let x=0;for(let i=0;i<a.length;i++)x|=a[i]^b[i];return x===0}
@@ -80,7 +80,7 @@ async function signup(request,env){
     const fullName=String(p.full_name||"").trim();
     const dob=String(p.date_of_birth||"");
     if(!validEmail(email)||email.length>254)return response({error:"Enter a valid email address."},400,request,env);
-    if(password.length<10)return response({error:"Password must be at least 10 characters."},400,request,env);
+    if(password.length<8)return response({error:"Password must be at least 8 characters."},400,request,env);
     if(!fullName||fullName.length>120)return response({error:"Enter your full name."},400,request,env);
     if(age(dob)<18)return response({error:"ReplyFlix requires users to be 18 or older."},400,request,env);
     if(p.age_attested!==true||p.terms_accepted_at==null)return response({error:"Confirm your age and accept the policies."},400,request,env);
@@ -205,7 +205,7 @@ async function authSmoke(request,env){
 async function changePassword(request,env){
   const a=await access(request,env);if(!a)return response({error:"Unauthorized."},401,request,env);
   const p=await jsonBody(request),current=String(p.current_password||""),next=String(p.new_password||"");
-  if(next.length<10)return response({error:"New password must be at least 10 characters."},400,request,env);
+  if(next.length<8)return response({error:"New password must be at least 8 characters."},400,request,env);
   const u=await env.DB.prepare("SELECT password_hash,password_salt FROM users WHERE id=?").bind(a.user.id).first();
   if(!u||!(await verifyPassword(current,u.password_salt,u.password_hash)))return response({error:"Current password is incorrect."},401,request,env);
   const hp=await hashPassword(next);
