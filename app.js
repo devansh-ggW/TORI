@@ -353,9 +353,19 @@ function initAuth(){
     try{
       const data=await apiFetch("/auth/resend-verification",{method:"POST",body:JSON.stringify({email:mail})});
       const detail=data?.email_id
-        ? "Email accepted by Resend. ID: "+data.email_id+(data.email_from?" · From: "+data.email_from:"")
+        ? "Resend accepted the email. ID: "+data.email_id+(data.email_from?" · From: "+data.email_from:"")
         : (data?.message||"A new verification email has been sent.");
       setMsg(detail,"good");
+      if(data?.email_id){
+        setTimeout(async()=>{
+          try{
+            const status=await apiFetch("/auth/verification-status",{method:"POST",body:JSON.stringify({email:mail,email_id:data.email_id})});
+            if(status?.last_event){
+              setMsg("Resend status: "+String(status.last_event).toUpperCase()+". ID: "+data.email_id,"good");
+            }
+          }catch{}
+        },1800);
+      }
     }catch(err){
       setMsg(err.message||"Could not resend the verification email.","warn");
     }finally{
@@ -405,6 +415,14 @@ function initAuth(){
               : "Verification email was not sent. Please use RESEND VERIFICATION.",
             sent?"neutral":"warn"
           );
+          if(sent&&data?.email_id){
+            setTimeout(async()=>{
+              try{
+                const status=await apiFetch("/auth/verification-status",{method:"POST",body:JSON.stringify({email:mail,email_id:data.email_id})});
+                if(status?.last_event)setMsg("Resend status: "+String(status.last_event).toUpperCase()+". ID: "+data.email_id,"good");
+              }catch{}
+            },1800);
+          }
         }
         return;
       }
