@@ -1,6 +1,6 @@
 const COOKIE_NAME="rf_session";
 const SESSION_DAYS=30;
-const PBKDF2_ITERATIONS=210000;
+const PBKDF2_ITERATIONS=100000;
 
 function corsHeaders(request,env){
   const origin=request.headers.get("Origin")||"";
